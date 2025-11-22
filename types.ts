@@ -70,6 +70,14 @@ export interface Reference {
 
 export type StoryboardStyle = 'Cinematic' | 'Sketch' | 'ComicBook' | 'Anime' | 'FilmNoir' | 'LineDrawing' | 'QuickLineDrawing' | 'LowPoly' | 'StylizedVideoGame' | 'Solarpunk' | 'Cyberpunk' | 'Sepia' | 'Custom';
 
+export interface ArcPoint {
+    id: number;
+    label: string; // "Episode 1", "Scene 1", etc.
+    tension: number; // 0-10
+    emotion: number; // 0-10
+    conflict: number; // 0-10
+}
+
 export interface ProjectState {
   seriesTitle: string;
   authorName: string;
@@ -83,6 +91,7 @@ export interface ProjectState {
   subplots: string;
   soundtrackPrompt: string;
   references: Reference[];
+  narrativeArc: ArcPoint[]; // New field
   
   // Content
   episodes: Episode[];

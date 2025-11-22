@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import type { Scene, Character, Reference } from '../types';
+import type { Scene, Character, Reference, ArcPoint, Episode } from '../types';
 import { generateStory } from '../services/geminiService';
 import { WandIcon, GripVerticalIcon } from './icons';
 import { useLanguage } from '../contexts/languageContext';
@@ -22,6 +22,7 @@ type StoryPreview = {
   characters: Omit<Character, 'id' | 'images'>[];
   episodes: EpisodePreview[];
   subplots: string;
+  narrativeArc: ArcPoint[];
 };
 
 interface GenerationStepConfig {
@@ -55,6 +56,7 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
     const defaultSteps: GenerationStepConfig[] = [
         { key: 'progressGeneratingCore', label: 'generatingCore', enabled: true },
         { key: 'progressSearchingReferences', label: 'searchingReferences', enabled: true },
+        { key: 'progressGeneratingArc', label: 'generatingArc', enabled: true },
         { key: 'progressRefiningStory', label: 'refiningStory', enabled: true },
         { key: 'progressCreatingCharacters', label: 'creatingCharacters', enabled: true },
         { key: 'progressRenamingCharacters', label: 'renamingCharacters', enabled: true },
@@ -234,15 +236,11 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
 
         const finalEpisodeCount = typeof episodeCount === 'number' && episodeCount > 0 ? episodeCount : 1;
 
-        // Filter and prepare steps for display in progress modal
-        let activeSteps = configSteps.filter(s => s.enabled);
-        
-        // Logic adjustment: If single episode, disable explicit episode outlining step as it is merged
-        if (finalEpisodeCount === 1) {
-             activeSteps = activeSteps.filter(s => s.key !== 'progressOutliningEpisodes');
-        }
+        // Filter steps that are enabled
+        const activeSteps = configSteps.filter(s => s.enabled);
+        // Note: We MUST include 'progressOutliningEpisodes' even for single episodes, 
+        // as the service layer uses it to initialize the episode data structure.
 
-        const stepsForDisplay = activeSteps.map(s => ({ key: s.key, label: t(s.key as any) }));
         const executionPlan = activeSteps.map(s => s.key);
         
         setCurrentProgressKey('');

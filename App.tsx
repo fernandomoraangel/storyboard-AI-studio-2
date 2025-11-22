@@ -6,8 +6,9 @@ import { SeriesBible } from './components/SeriesBible';
 import { EpisodeList } from './components/EpisodeList';
 import { CharacterDesigner } from './components/CharacterDesigner';
 import { StoryGenerator } from './components/StoryGenerator';
-import type { Scene, Character, Reference, Shot, StoryboardStyle, ProjectMeta, CustomStyle, CustomStyleImage, Episode, ProjectState } from './types';
-import { FilmIcon, PlusIcon, DownloadIcon, UserIcon, BookOpenIcon, TrashIcon, FloppyDiskIcon, FolderOpenIcon, ShareIcon, WandIcon, VideoIcon, CheckCircleIcon, RowsIcon } from './components/icons';
+import { NarrativeArcEditor } from './components/NarrativeArcEditor';
+import type { Scene, Character, Reference, Shot, StoryboardStyle, ProjectMeta, CustomStyle, CustomStyleImage, Episode, ProjectState, ArcPoint } from './types';
+import { FilmIcon, PlusIcon, DownloadIcon, UserIcon, BookOpenIcon, TrashIcon, FloppyDiskIcon, FolderOpenIcon, ShareIcon, WandIcon, VideoIcon, CheckCircleIcon, RowsIcon, ActivityIcon } from './components/icons';
 import { createImagePromptForShot, generateImage, generateSynopsis, createCharacterImagePrompt, ensureStoryConsistency, modifyStory } from './services/geminiService';
 import { exportStoryboardToPDF } from './services/pdfService';
 import { translations, Language } from './lib/translations';
@@ -23,7 +24,7 @@ import { LanguageContext } from './contexts/languageContext';
 import { VideoGenerator } from './components/VideoGenerator';
 import { PDFExportModal, PDFExportOptions } from './components/PDFExportModal';
 
-type WorkflowPhase = 'bible' | 'episodes' | 'storyboard' | 'generator' | 'export';
+type WorkflowPhase = 'bible' | 'arc' | 'episodes' | 'storyboard' | 'generator' | 'export';
 
 type GenerationJob = {
     type: 'character' | 'shot';
@@ -78,6 +79,7 @@ export const App: React.FC = () => {
   const [references, setReferences] = useState<Reference[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [bibleTab, setBibleTab] = useState<'general' | 'characters' | 'style'>('general');
+  const [narrativeArc, setNarrativeArc] = useState<ArcPoint[]>([]);
   
   // Episode Data
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -122,10 +124,10 @@ export const App: React.FC = () => {
   // State helper
   const gatherState = useCallback((): ProjectState => ({
       seriesTitle, authorName, storyboardStyle, aspectRatio, soundtrackPrompt, logline,
-      structuralAnalysis, treatment, references, episodes, characters, subplots,
+      structuralAnalysis, treatment, references, episodes, characters, subplots, narrativeArc
   }), [
       seriesTitle, authorName, storyboardStyle, aspectRatio, soundtrackPrompt, logline,
-      structuralAnalysis, treatment, references, episodes, characters, subplots,
+      structuralAnalysis, treatment, references, episodes, characters, subplots, narrativeArc
   ]);
 
   // Apply State
@@ -142,6 +144,7 @@ export const App: React.FC = () => {
       setTreatment(state?.treatment || '');
       setReferences(state?.references || []);
       setCharacters(state?.characters || []);
+      setNarrativeArc(state?.narrativeArc || []);
       
       // Handle legacy 'scenes' migration if necessary, otherwise use 'episodes'
       if (state && 'scenes' in state && (!state.episodes || state.episodes.length === 0)) {
@@ -333,7 +336,7 @@ export const App: React.FC = () => {
   const resetState = () => {
     applyState(null);
     setCurrentProjectId(null);
-    const newState = JSON.stringify({ seriesTitle: '', authorName: '', storyboardStyle: 'Cinematic', aspectRatio: '16:9', soundtrackPrompt: '', logline: '', structuralAnalysis: '', treatment: '', references: [], episodes: [], characters: [], subplots: '' });
+    const newState = JSON.stringify({ seriesTitle: '', authorName: '', storyboardStyle: 'Cinematic', aspectRatio: '16:9', soundtrackPrompt: '', logline: '', structuralAnalysis: '', treatment: '', references: [], episodes: [], characters: [], subplots: '', narrativeArc: [] });
     lastSavedState.current = newState;
     setIsDirty(false);
     setWorkflowPhase('bible');
@@ -419,6 +422,7 @@ export const App: React.FC = () => {
       setTreatment(story.treatment);
       setReferences(story.references);
       setSubplots(story.subplots);
+      setNarrativeArc(story.narrativeArc || []);
       
       const newCharacters: Character[] = story.characters.map((char: any, i: number) => ({ ...char, id: Date.now() + i, images: [] }));
       setCharacters(newCharacters);
@@ -557,6 +561,9 @@ export const App: React.FC = () => {
             <button onClick={() => { setWorkflowPhase('bible'); setBibleTab('general'); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'bible' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
                 <BookOpenIcon className="w-5 h-5" /> Series Bible
             </button>
+            <button onClick={() => setWorkflowPhase('arc')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'arc' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
+                <ActivityIcon className="w-5 h-5" /> Narrative Arc
+            </button>
             <button onClick={() => setWorkflowPhase('episodes')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'episodes' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
                 <RowsIcon className="w-5 h-5" /> Episodes
             </button>
@@ -655,6 +662,26 @@ export const App: React.FC = () => {
                         onAddCharacter={addCharacter}
                     />
                 </div>
+            )}
+
+            {workflowPhase === 'arc' && (
+                <NarrativeArcEditor
+                    arc={narrativeArc}
+                    setArc={setNarrativeArc}
+                    currentLogline={logline}
+                    currentTreatment={treatment}
+                    currentEpisodes={episodes.map(e => ({ title: e.title, synopsis: e.synopsis }))}
+                    onStoryUpdated={(newLogline, newTreatment, newEpisodesData) => {
+                        setLogline(newLogline);
+                        setTreatment(newTreatment);
+                        // Update episode synopses while keeping IDs and scenes
+                        setEpisodes(prev => prev.map((ep, i) => {
+                            const newData = newEpisodesData[i];
+                            return newData ? { ...ep, title: newData.title, synopsis: newData.synopsis } : ep;
+                        }));
+                        alert('Story updated based on new narrative arc!');
+                    }}
+                />
             )}
 
             {workflowPhase === 'episodes' && (

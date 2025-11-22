@@ -1,4 +1,5 @@
 
+
 export type Language = 'en' | 'es';
 
 export type Options = {
@@ -163,6 +164,16 @@ export const translations: Record<Language, Translations> = {
     confirmMassGenerationYes: "Yes, Generate All",
     confirmMassGenerationNo: "No, I'll do it manually",
 
+    // Narrative Arc
+    narrativeArcTitle: "Narrative Arc",
+    narrativeArcDescription: "Visualize and edit the emotional trajectory, conflict, and dramatic tension of your story. Drag the points to adjust the pacing, then click 'Update Story'.",
+    arcTension: "Dramatic Tension",
+    arcEmotion: "Emotional State",
+    arcConflict: "Conflict Level",
+    arcNoData: "No arc data available. Generate a story first.",
+    rewriteStoryFromArc: "Update Story from Arc",
+    rewritingStory: "Rewriting Story...",
+
     // Frame.io
     frameIOTokenSetup: "Frame.io Setup",
     setupInstructions_token_1: "To export to Frame.io, you need a Developer Token.",
@@ -276,6 +287,7 @@ export const translations: Record<Language, Translations> = {
     // Progress
     progressGeneratingCore: "Generating core concept...",
     progressSearchingReferences: "Searching for references...",
+    progressGeneratingArc: "Generating narrative arc analysis...",
     progressRefiningStory: "Refining story & treatment...",
     progressCreatingCharacters: "Creating characters...",
     progressRenamingCharacters: "Refining character names...",
@@ -726,6 +738,16 @@ export const translations: Record<Language, Translations> = {
     confirmMassGenerationMessage: "¿Quieres generar las {count} imágenes para los personajes y planos ahora? Esto puede tomar tiempo y consumir cuota de API.",
     confirmMassGenerationYes: "Sí, Generar Todas",
     confirmMassGenerationNo: "No, lo haré manualmente",
+    
+    // Narrative Arc
+    narrativeArcTitle: "Arco Narrativo",
+    narrativeArcDescription: "Visualiza y edita la trayectoria emocional, el conflicto y la tensión dramática de tu historia. Arrastra los puntos para ajustar el ritmo, luego haz clic en 'Actualizar Historia'.",
+    arcTension: "Tensión Dramática",
+    arcEmotion: "Estado Emocional",
+    arcConflict: "Nivel de Conflicto",
+    arcNoData: "No hay datos de arco disponibles. Genera una historia primero.",
+    rewriteStoryFromArc: "Actualizar Historia desde el Arco",
+    rewritingStory: "Reescribiendo Historia...",
 
     // Frame.io
     frameIOTokenSetup: "Configuración de Frame.io",
@@ -840,6 +862,7 @@ export const translations: Record<Language, Translations> = {
     // Progress
     progressGeneratingCore: "Generando concepto central...",
     progressSearchingReferences: "Buscando referencias...",
+    progressGeneratingArc: "Generando análisis de arco narrativo...",
     progressRefiningStory: "Refinando historia y tratamiento...",
     progressCreatingCharacters: "Creando personajes...",
     progressRenamingCharacters: "Refinando nombres de personajes...",

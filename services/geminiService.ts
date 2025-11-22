@@ -1,12 +1,15 @@
 
 import { GoogleGenAI, Chat, GenerateContentResponse, Type, FunctionDeclaration, Part, FunctionCall, Modality } from "@google/genai";
-import type { Character, Scene, Reference, Shot, StoryboardStyle } from '../types';
+import type { Character, Scene, Reference, Shot, StoryboardStyle, ArcPoint, ProjectState } from '../types';
 import type { Language } from "../lib/translations";
 import { translations } from "../lib/translations";
-import { ProjectState } from "../lib/db";
 import { ModificationSettings } from "../components/ModificationModal";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const cleanJson = (text: string) => {
+    return text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+};
 
 const generateContentWithRetry = async (params: any): Promise<GenerateContentResponse> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
@@ -283,7 +286,7 @@ export const completeCharacterDetails = async (character: Partial<Character>, la
             },
         },
     });
-    return JSON.parse(response.text.trim());
+    return JSON.parse(cleanJson(response.text.trim()));
 };
 
 export const generateCharacterFromDescription = async (description: string, language: Language): Promise<Omit<Character, 'id' | 'images'>> => {
@@ -304,7 +307,7 @@ export const generateCharacterFromDescription = async (description: string, lang
             },
         },
     });
-    return JSON.parse(response.text.trim());
+    return JSON.parse(cleanJson(response.text.trim()));
 };
 
 export const enrichCharacterFromDescription = async (character: Character, enrichmentDetails: string, language: Language): Promise<Character> => {
@@ -326,8 +329,64 @@ export const enrichCharacterFromDescription = async (character: Character, enric
             },
         },
     });
-    const updatedDetails = JSON.parse(response.text.trim());
+    const updatedDetails = JSON.parse(cleanJson(response.text.trim()));
     return { ...character, ...updatedDetails }; 
+};
+
+export const updateStoryFromArc = async (
+    currentLogline: string,
+    currentTreatment: string,
+    currentEpisodes: { title: string; synopsis: string }[],
+    newArc: ArcPoint[],
+    language: Language
+): Promise<{ logline: string; treatment: string; episodes: { title: string; synopsis: string }[] }> => {
+    const langInstruction = language === 'es' ? 'en español' : 'in English';
+    const arcData = JSON.stringify(newArc.map(p => `${p.label}: Tension=${p.tension}, Emotion=${p.emotion}, Conflict=${p.conflict}`));
+    const episodesData = JSON.stringify(currentEpisodes);
+
+    const prompt = `
+    The user has drastically modified the Narrative Arc (Dramatic Tension, Emotional State, Conflict Level) of the story.
+    You must rewrite the Logline, Treatment, and Episode Synopses to match this new pacing and emotional trajectory exactly.
+    
+    New Narrative Arc Data:
+    ${arcData}
+    
+    Current Logline: ${currentLogline}
+    Current Treatment: ${currentTreatment}
+    Current Episodes: ${episodesData}
+    
+    Respond with JSON containing 'logline', 'treatment', and 'episodes' (array of title, synopsis).
+    Ensure the response is ${langInstruction}.
+    `;
+
+    const response = await generateContentWithRetry({
+        model: 'gemini-3-pro-preview',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    logline: { type: Type.STRING },
+                    treatment: { type: Type.STRING },
+                    episodes: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                title: { type: Type.STRING },
+                                synopsis: { type: Type.STRING }
+                            },
+                            required: ['title', 'synopsis']
+                        }
+                    }
+                },
+                required: ['logline', 'treatment', 'episodes']
+            }
+        }
+    });
+
+    return JSON.parse(cleanJson(response.text.trim()));
 };
 
 export const generateStory = async (
@@ -341,7 +400,7 @@ export const generateStory = async (
     episodeCount: number,
     setProgress: (messageKey: string, data?: { [key: string]: string | number }) => void,
     executionPlan?: string[]
-): Promise<{ title: string; logline: string; soundtrackPrompt: string; treatment: string; structuralAnalysis: string; references: Reference[]; characters: Omit<Character, 'id' | 'images'>[]; episodes: { title: string, synopsis: string, scenes: Omit<Scene, 'id'>[] }[]; subplots: string }> => {
+): Promise<{ title: string; logline: string; soundtrackPrompt: string; treatment: string; structuralAnalysis: string; references: Reference[]; characters: Omit<Character, 'id' | 'images'>[]; episodes: { title: string, synopsis: string, scenes: Omit<Scene, 'id'>[] }[]; subplots: string; narrativeArc: ArcPoint[] }> => {
     const langInstruction = language === 'es' ? 'en español' : 'in English';
     const userPrompt = prompt.trim() === '' ? (language === 'es' ? 'una serie sorprendente y visualmente interesante' : 'a surprising and visually interesting series') : prompt;
     const hasSubplots = typeof subplotCount === 'number' && subplotCount > 0;
@@ -357,10 +416,11 @@ export const generateStory = async (
         structuralAnalysis: '',
         soundtrackPrompt: '',
         subplots: '',
+        narrativeArc: [] as ArcPoint[],
     };
 
     // Default execution plan
-    const plan = executionPlan || ['progressGeneratingCore', 'progressSearchingReferences', 'progressRefiningStory', 'progressCreatingCharacters', 'progressRenamingCharacters', 'progressRefiningCharactersSeger', 'progressAdjustingStoryToCharacters', 'progressOutliningEpisodes', 'progressOutliningScenes', 'progressGeneratingShots', 'progressGeneratingAnalysis'];
+    const plan = executionPlan || ['progressGeneratingCore', 'progressSearchingReferences', 'progressGeneratingArc', 'progressRefiningStory', 'progressCreatingCharacters', 'progressRenamingCharacters', 'progressRefiningCharactersSeger', 'progressAdjustingStoryToCharacters', 'progressOutliningEpisodes', 'progressOutliningScenes', 'progressGeneratingShots', 'progressGeneratingAnalysis'];
 
     const stepExecutors: { [key: string]: () => Promise<void> } = {
         'progressGeneratingCore': async () => {
@@ -372,7 +432,7 @@ export const generateStory = async (
                     responseSchema: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, logline: { type: Type.STRING }, treatment: { type: Type.STRING } }, required: ['title', 'logline', 'treatment'] }
                 }
             });
-            context.coreConcept = JSON.parse(coreConceptResponse.text.trim());
+            context.coreConcept = JSON.parse(cleanJson(coreConceptResponse.text.trim()));
             context.refinedOutline = { logline: context.coreConcept.logline, treatment: context.coreConcept.treatment, references: [] };
         },
         'progressSearchingReferences': async () => {
@@ -380,6 +440,44 @@ export const generateStory = async (
             const searchResponse = await generateContentWithRetry({ model: 'gemini-2.5-flash', contents: `Find artistic references for: "${context.coreConcept.logline}".`, config: { tools: [{ googleSearch: {} }] } });
             const searchReferences = (searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []).map((c: any) => ({ title: c.web?.title, uri: c.web?.uri })).filter(ref => ref.title && ref.uri);
             context.refinedOutline.references = searchReferences;
+        },
+        'progressGeneratingArc': async () => {
+             // Generate the initial arc based on the core concept
+             const arcPrompt = `Create a narrative arc analysis for this story: "${context.refinedOutline.logline}".
+             I need ${episodeCount} data points (one per episode) representing the trajectory of:
+             1. Dramatic Tension (0-10)
+             2. Emotional State (0-10, where 0 is despair, 10 is euphoria)
+             3. Conflict Level (0-10)
+             Return JSON array 'points' where each point has { label: "Episode X", tension: number, emotion: number, conflict: number }.`;
+             
+             const arcResponse = await generateContentWithRetry({
+                model: 'gemini-2.5-flash',
+                contents: arcPrompt,
+                config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: {
+                            points: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        label: { type: Type.STRING },
+                                        tension: { type: Type.NUMBER },
+                                        emotion: { type: Type.NUMBER },
+                                        conflict: { type: Type.NUMBER }
+                                    },
+                                    required: ['label', 'tension', 'emotion', 'conflict']
+                                }
+                            }
+                        },
+                        required: ['points']
+                    }
+                }
+             });
+             const arcData = JSON.parse(cleanJson(arcResponse.text.trim())).points;
+             context.narrativeArc = arcData.map((p: any, i: number) => ({ ...p, id: i }));
         },
         'progressRefiningStory': async () => {
             if (context.refinedOutline.references.length === 0) return;
@@ -398,7 +496,7 @@ export const generateStory = async (
                     }
                 }
             });
-            const parsedResponse = JSON.parse(refinedOutlineResponse.text.trim());
+            const parsedResponse = JSON.parse(cleanJson(refinedOutlineResponse.text.trim()));
             const enrichedData = parsedResponse.enrichedReferences || [];
             context.refinedOutline.references = context.refinedOutline.references.map((ref, index) => ({ uri: ref.uri, title: enrichedData[index]?.title || ref.title, description: enrichedData[index]?.description || '', details: enrichedData[index]?.details || '' }));
             context.refinedOutline.logline = parsedResponse.logline || context.refinedOutline.logline;
@@ -413,7 +511,7 @@ export const generateStory = async (
                     responseSchema: { type: Type.OBJECT, properties: { characters: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, role: { type: Type.STRING }, personality: { type: Type.STRING }, appearance: { type: Type.STRING }, outfit: { type: Type.STRING }, behavior: { type: Type.STRING } }, required: ["name", "role", "personality", "appearance", "outfit", "behavior"] } } }, required: ["characters"] }
                 }
             });
-            context.characters = JSON.parse(characterGenResponse.text.trim()).characters;
+            context.characters = JSON.parse(cleanJson(characterGenResponse.text.trim())).characters;
         },
         'progressRenamingCharacters': async () => {
             if (context.characters.length === 0) return;
@@ -425,7 +523,7 @@ export const generateStory = async (
                     responseSchema: { type: Type.OBJECT, properties: { characters: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, role: { type: Type.STRING }, personality: { type: Type.STRING }, appearance: { type: Type.STRING }, outfit: { type: Type.STRING }, behavior: { type: Type.STRING }, }, required: ["name", "role", "personality", "appearance", "outfit", "behavior"] } } }, required: ["characters"] }
                 }
             });
-            context.characters = JSON.parse(characterRenamingResponse.text.trim()).characters;
+            context.characters = JSON.parse(cleanJson(characterRenamingResponse.text.trim())).characters;
         },
         'progressRefiningCharactersSeger': async () => {
              if (context.characters.length === 0) return;
@@ -437,7 +535,7 @@ export const generateStory = async (
                     responseSchema: { type: Type.OBJECT, properties: { characters: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, role: { type: Type.STRING }, personality: { type: Type.STRING }, appearance: { type: Type.STRING }, outfit: { type: Type.STRING }, behavior: { type: Type.STRING }, }, required: ["name", "role", "personality", "appearance", "outfit", "behavior"] } } }, required: ["characters"] }
                 }
             });
-             context.characters = JSON.parse(characterSegerResponse.text.trim()).characters;
+             context.characters = JSON.parse(cleanJson(characterSegerResponse.text.trim())).characters;
         },
         'progressAdjustingStoryToCharacters': async () => {
              if (context.characters.length === 0) return;
@@ -449,7 +547,7 @@ export const generateStory = async (
                     responseSchema: { type: Type.OBJECT, properties: { logline: { type: Type.STRING }, treatment: { type: Type.STRING }, }, required: ["logline", "treatment"] }
                 }
             });
-            const res = JSON.parse(storyAdjustmentResponse.text.trim());
+            const res = JSON.parse(cleanJson(storyAdjustmentResponse.text.trim()));
             context.refinedOutline.logline = res.logline; context.refinedOutline.treatment = res.treatment;
         },
         'progressOutliningEpisodes': async () => {
@@ -467,7 +565,7 @@ export const generateStory = async (
                     responseSchema: { type: Type.OBJECT, properties: { episodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, synopsis: { type: Type.STRING } }, required: ["title", "synopsis"] } } }, required: ["episodes"] }
                 }
             });
-            context.episodeOutlines = JSON.parse(episodesResponse.text.trim()).episodes;
+            context.episodeOutlines = JSON.parse(cleanJson(episodesResponse.text.trim())).episodes;
         },
         'progressOutliningScenes': async () => {
             // Generate detailed scene outlines for ALL episodes
@@ -490,7 +588,7 @@ export const generateStory = async (
                         contents: promptContent,
                         config: schemaConfig
                     });
-                    const scenes = JSON.parse(sceneOutlinesResponse.text.trim()).scenes;
+                    const scenes = JSON.parse(cleanJson(sceneOutlinesResponse.text.trim())).scenes;
                     context.fullEpisodes.push({ ...ep, scenes });
                 } catch (e) {
                     console.warn(`Pro model failed for outlining scenes in Ep ${index + 1}, trying fallback...`, e);
@@ -501,7 +599,7 @@ export const generateStory = async (
                             contents: promptContent,
                             config: schemaConfig
                         });
-                        const scenes = JSON.parse(sceneOutlinesResponse.text.trim()).scenes;
+                        const scenes = JSON.parse(cleanJson(sceneOutlinesResponse.text.trim())).scenes;
                         context.fullEpisodes.push({ ...ep, scenes });
                     } catch (fallbackError) {
                          console.error(`Failed to outline scenes for episode ${index + 1} with fallback`, fallbackError);
@@ -531,7 +629,7 @@ export const generateStory = async (
                                 responseSchema: { type: Type.OBJECT, properties: { shots: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { description: { type: Type.STRING }, duration: { type: Type.NUMBER }, soundFx: { type: Type.STRING }, notes: { type: Type.STRING }, shotType: { type: Type.STRING, enum: [...options.shotTypeOptions] }, cameraMovement: { type: Type.STRING, enum: [...options.cameraMovementOptions] }, cameraType: { type: Type.STRING, enum: [...options.cameraTypeOptions] }, lensType: { type: Type.STRING, enum: [...options.lensTypeOptions] }, lensBlur: { type: Type.STRING, enum: [...options.lensBlurOptions] }, lighting: { type: Type.STRING, enum: [...options.lightingOptions] }, style: { type: Type.STRING, enum: [...options.styleOptions] }, atmosphere: { type: Type.STRING }, colorGrade: { type: Type.STRING, enum: [...options.colorGradeOptions] }, filmStock: { type: Type.STRING, enum: [...options.filmStockOptions] }, filmGrain: { type: Type.STRING, enum: [...options.filmGrainOptions] }, technicalNotes: { type: Type.STRING } }, required: ["description", "duration", "soundFx", "notes", "shotType", "cameraMovement", "cameraType", "lensType", "lensBlur", "lighting", "style", "atmosphere", "colorGrade", "filmStock", "filmGrain", "technicalNotes"] } } }, required: ["shots"] }
                             }
                         });
-                        const parsed = JSON.parse(shotsResponse.text.trim());
+                        const parsed = JSON.parse(cleanJson(shotsResponse.text.trim()));
                         if (parsed.shots) {
                             enrichedScenes.push({ ...outline, shots: parsed.shots.map((shot: any) => ({ ...shot, id: Date.now() + Math.random(), imageUrl: null, videoUrl: null })), transitionType: options.transitionTypeOptions[0] });
                         } else {
@@ -558,7 +656,7 @@ export const generateStory = async (
                     responseSchema: { type: Type.OBJECT, properties: { structuralAnalysis: { type: Type.STRING }, soundtrackPrompt: { type: Type.STRING }, subplots: { type: Type.STRING } }, required: ["structuralAnalysis", "soundtrackPrompt", ...(hasSubplots ? ["subplots"] : [])] }
                 }
             });
-            const analysisResult = JSON.parse(finalAnalysisResponse.text.trim());
+            const analysisResult = JSON.parse(cleanJson(finalAnalysisResponse.text.trim()));
             context.structuralAnalysis = analysisResult.structuralAnalysis;
             context.soundtrackPrompt = analysisResult.soundtrackPrompt;
             context.subplots = analysisResult.subplots || '';
@@ -603,7 +701,8 @@ export const generateStory = async (
         references: context.refinedOutline.references,
         characters: context.characters,
         episodes: finalEpisodes,
-        subplots: context.subplots
+        subplots: context.subplots,
+        narrativeArc: context.narrativeArc,
     };
 };
 
@@ -649,7 +748,7 @@ export const translateDetailsToEnglish = async (details: { [key: string]: string
     const prompt = `Translate JSON values into English. Input: ${JSON.stringify(detailsToTranslate)}. Output JSON:`;
     try {
         const response = await generateContentWithRetry({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: Object.fromEntries(Object.keys(detailsToTranslate).map(k => [k, { type: Type.STRING }])), required: Object.keys(detailsToTranslate) } } });
-        return { ...details, ...JSON.parse(response.text.trim()) };
+        return { ...details, ...JSON.parse(cleanJson(response.text.trim())) };
     } catch (e) { return details; }
 };
 

@@ -445,21 +445,27 @@ export const App: React.FC = () => {
           setWorkflowPhase('episodes');
       }
 
-      // Trigger Mass Gen for characters and scenes of the FIRST episode only (or all if manageable)
+      // Trigger Mass Gen for characters and scenes of ALL episodes
       const jobs: GenerationJob[] = [];
       
       newCharacters.forEach(char => {
           jobs.push({ type: 'character', id: char.id, name: char.name, prompt: createCharacterImagePrompt(char, storyboardStyle, aspectRatio) });
       });
 
-      // Only generate shots for the first episode to avoid quota issues
-      if (newEpisodes.length > 0) {
-          newEpisodes[0].scenes.forEach(scene => {
+      // Generate shots for ALL episodes
+      newEpisodes.forEach((ep, epIdx) => {
+          ep.scenes.forEach(scene => {
               scene.shots.forEach((shot: any, sIdx: number) => {
-                  jobs.push({ type: 'shot', id: shot.id, parentId: scene.id, name: `Ep1 - ${scene.title} - Shot ${sIdx + 1}`, prompt: createImagePromptForShot(shot, scene, newCharacters, storyboardStyle, aspectRatio) });
+                  jobs.push({ 
+                      type: 'shot', 
+                      id: shot.id, 
+                      parentId: scene.id, 
+                      name: `Ep${epIdx + 1} - ${scene.title} - Shot ${sIdx + 1}`, 
+                      prompt: createImagePromptForShot(shot, scene, newCharacters, storyboardStyle, aspectRatio) 
+                  });
               });
           });
-      }
+      });
 
       if (jobs.length > 0) {
           setShowMassGenConfirmModal(jobs);

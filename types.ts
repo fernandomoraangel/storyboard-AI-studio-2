@@ -3,6 +3,7 @@ export interface Shot {
   id: number;
   description: string;
   imageUrl: string | null;
+  videoUrl: string | null;
   shotType: string;
   cameraMovement: string;
   cameraType: string;

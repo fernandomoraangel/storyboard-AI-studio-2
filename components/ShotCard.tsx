@@ -1,7 +1,8 @@
+
 import React, { useState, useCallback, ChangeEvent } from 'react';
 import type { Shot, Scene, Character, StoryboardStyle } from '../types';
-import { generateImage, createImagePromptForShot, translateDetailsToEnglish } from '../services/geminiService';
-import { SparklesIcon, TrashIcon, UploadIcon, ClipboardIcon, ChevronDownIcon, GripVerticalIcon } from './icons';
+import { generateImage, generateVideo, createImagePromptForShot, translateDetailsToEnglish } from '../services/geminiService';
+import { SparklesIcon, TrashIcon, UploadIcon, ClipboardIcon, ChevronDownIcon, GripVerticalIcon, VideoIcon } from './icons';
 import { LoadingSpinner } from './LoadingSpinner';
 import { useLanguage } from '../contexts/languageContext';
 import { translations, Options } from '../lib/translations';
@@ -60,6 +61,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({ shot, shotNumber, scene, cha
   const { t, options, language } = useLanguage();
   const [isOpen, setIsOpen] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
@@ -103,6 +105,54 @@ export const ShotCard: React.FC<ShotCardProps> = ({ shot, shotNumber, scene, cha
       setIsGenerating(false);
     }
   }, [shot, scene, characters, storyboardStyle, aspectRatio, updateShot, t]);
+
+  const handleGenerateVideo = async () => {
+    // Check API Key
+    if (window.aistudio && !await window.aistudio.hasSelectedApiKey()) {
+        await window.aistudio.openSelectKey();
+        if (!await window.aistudio.hasSelectedApiKey()) return; // User cancelled
+    }
+
+    setIsGeneratingVideo(true);
+    setGenerationError(null);
+
+    try {
+        // Prepare Image if exists
+        let imageInput = null;
+        if (shot.imageUrl && shot.imageUrl.startsWith('data:')) {
+             const parts = shot.imageUrl.split(',');
+             const mime = parts[0].match(/:(.*?);/)?.[1];
+             const base64 = parts[1];
+             if (mime && base64) {
+                 imageInput = { base64, mimeType: mime };
+             }
+        }
+
+        const prompt = createImagePromptForShot(shot, scene, characters, storyboardStyle, aspectRatio);
+        // Correct aspect ratio type for Veo
+        const videoAspectRatio = (['9:16', '3:4'].includes(aspectRatio)) ? '9:16' : '16:9';
+
+        const videoUrl = await generateVideo(
+            prompt, 
+            imageInput, 
+            videoAspectRatio, 
+            (key) => { /* optional progress feedback */ }
+        );
+
+        updateShot({ ...shot, videoUrl });
+
+    } catch (e) {
+        console.error(e);
+        const errorMessage = (e as Error).message || 'Unknown error';
+        if (errorMessage.includes("Requested entity was not found.")) {
+             setGenerationError(t('errorApiKey'));
+        } else {
+             setGenerationError(t('errorGeneric', { message: errorMessage }));
+        }
+    } finally {
+        setIsGeneratingVideo(false);
+    }
+  };
 
   const getCharacterDetailsForPrompt = useCallback((): string => {
     if (!scene.characters || scene.characters.toLowerCase() === 'none' || characters.length === 0) {
@@ -269,27 +319,42 @@ export const ShotCard: React.FC<ShotCardProps> = ({ shot, shotNumber, scene, cha
         className={`transition-all duration-500 ease-in-out overflow-hidden ${isOpen ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'}`}
       >
         <div className="px-4 pb-4 space-y-4">
-          <div className="aspect-video w-full bg-gray-700 rounded-md flex items-center justify-center overflow-hidden relative">
-            {isGenerating ? (
+          <div className="aspect-video w-full bg-gray-700 rounded-md flex items-center justify-center overflow-hidden relative group">
+            {isGenerating || isGeneratingVideo ? (
               <div className="text-center">
                 <LoadingSpinner />
-                <p className="text-sm mt-2">{t('generatingImage')}</p>
+                <p className="text-sm mt-2">{isGeneratingVideo ? t('generatingVideo') : t('generatingImage')}</p>
               </div>
+            ) : shot.videoUrl ? (
+                <div className="w-full h-full relative">
+                    <video src={shot.videoUrl} controls className="w-full h-full object-cover" />
+                    <button 
+                        onClick={() => updateShot({...shot, videoUrl: null})} 
+                        className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1 rounded z-10 text-xs"
+                    >
+                        Close Video
+                    </button>
+                </div>
             ) : shot.imageUrl ? (
               <img src={shot.imageUrl} alt={`${t('shot')} ${shotNumber}`} className="w-full h-full object-cover" />
             ) : (
               <span className="text-gray-500">{t('noImage')}</span>
             )}
           </div>
+          
           <div className="flex gap-2">
             <label className="flex-1 cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent hover:bg-gray-700 text-blue-400 hover:text-blue-300 h-10 px-4 py-2">
               <UploadIcon className="w-4 h-4 mr-2" />
               {t('upload')}
               <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
             </label>
-            <button onClick={handleGenerateImage} disabled={isGenerating} className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-indigo-600 text-indigo-50 hover:bg-indigo-600/90 h-10 px-4 py-2 disabled:bg-indigo-400">
+            <button onClick={handleGenerateImage} disabled={isGenerating || isGeneratingVideo} className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-indigo-600 text-indigo-50 hover:bg-indigo-600/90 h-10 px-4 py-2 disabled:bg-indigo-400">
               <SparklesIcon className="w-4 h-4 mr-2" />
               {isGenerating ? t('generating') : t('generate')}
+            </button>
+             <button onClick={handleGenerateVideo} disabled={isGenerating || isGeneratingVideo} className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-purple-600 text-purple-50 hover:bg-purple-600/90 h-10 px-4 py-2 disabled:bg-purple-400">
+              <VideoIcon className="w-4 h-4 mr-2" />
+              {isGeneratingVideo ? '...' : t('generateVideo')}
             </button>
           </div>
            {generationError && (

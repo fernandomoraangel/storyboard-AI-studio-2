@@ -219,7 +219,7 @@ export const App: React.FC = () => {
   const addScene = (sceneData?: Partial<Scene>): Scene => {
     if (activeEpisodeId === null) return {} as Scene;
     const newId = Date.now();
-    const newShot: Shot = { id: Date.now() + 1, description: '', imageUrl: null, shotType: '', cameraMovement: '', cameraType: '', lensType: '', lensBlur: '', atmosphere: '', lighting: '', style: '', technicalNotes: '', colorGrade: '', filmGrain: '', filmStock: '', duration: 5, soundFx: '', notes: '' };
+    const newShot: Shot = { id: Date.now() + 1, description: '', imageUrl: null, videoUrl: null, shotType: '', cameraMovement: '', cameraType: '', lensType: '', lensBlur: '', atmosphere: '', lighting: '', style: '', technicalNotes: '', colorGrade: '', filmGrain: '', filmStock: '', duration: 5, soundFx: '', notes: '' };
     const fullNewScene: Scene = { id: newId, title: sceneData?.title || `${t('scene')} ${activeScenes.length + 1}`, characters: sceneData?.characters || '', setting: sceneData?.setting || '', location: sceneData?.location || '', dialogueType: sceneData?.dialogueType || 'dialogue', dialogue: sceneData?.dialogue || '', musicPrompt: sceneData?.musicPrompt || '', keyObjects: sceneData?.keyObjects || '', actions: sceneData?.actions || '', tone: sceneData?.tone || '', notes: sceneData?.notes || '', shots: sceneData?.shots || [newShot], transitionType: options.transitionTypeOptions[0] };
     
     handleSceneUpdate([...activeScenes, fullNewScene]);
@@ -235,7 +235,7 @@ export const App: React.FC = () => {
   };
 
   const addShot = (sceneId: number) => {
-      handleSceneUpdate(activeScenes.map(s => s.id === sceneId ? { ...s, shots: [...s.shots, { id: Date.now(), description: '', imageUrl: null, shotType: '', cameraMovement: '', cameraType: '', lensType: '', lensBlur: '', atmosphere: '', lighting: '', style: '', technicalNotes: '', colorGrade: '', filmGrain: '', filmStock: '', duration: 5, soundFx: '', notes: '' }] } : s));
+      handleSceneUpdate(activeScenes.map(s => s.id === sceneId ? { ...s, shots: [...s.shots, { id: Date.now(), description: '', imageUrl: null, videoUrl: null, shotType: '', cameraMovement: '', cameraType: '', lensType: '', lensBlur: '', atmosphere: '', lighting: '', style: '', technicalNotes: '', colorGrade: '', filmGrain: '', filmStock: '', duration: 5, soundFx: '', notes: '' }] } : s));
   };
 
   const updateShot = (sceneId: number, updatedShot: Shot) => {
@@ -432,7 +432,7 @@ export const App: React.FC = () => {
           scenes: (ep.scenes || []).map((scene: any, sIdx: number) => ({
               ...scene,
               id: Date.now() + i * 1000 + sIdx,
-              shots: (scene.shots || []).map((shot: any) => ({ ...shot, imageUrl: null }))
+              shots: (scene.shots || []).map((shot: any) => ({ ...shot, imageUrl: null, videoUrl: null }))
           }))
       }));
 

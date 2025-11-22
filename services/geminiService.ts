@@ -533,14 +533,14 @@ export const generateStory = async (
                         });
                         const parsed = JSON.parse(shotsResponse.text.trim());
                         if (parsed.shots) {
-                            enrichedScenes.push({ ...outline, shots: parsed.shots.map((shot: any) => ({ ...shot, id: Date.now() + Math.random(), imageUrl: null })), transitionType: options.transitionTypeOptions[0] });
+                            enrichedScenes.push({ ...outline, shots: parsed.shots.map((shot: any) => ({ ...shot, id: Date.now() + Math.random(), imageUrl: null, videoUrl: null })), transitionType: options.transitionTypeOptions[0] });
                         } else {
                              throw new Error("No shots returned");
                         }
                     } catch (e) {
                         console.error(`Failed to generate shots for "${outline.title}":`, e);
                         const errorMsg = language === 'es' ? 'La generación falló. Por favor edite manualmente.' : 'Generation failed. Please edit manually.';
-                        enrichedScenes.push({ ...outline, shots: [{ id: Date.now(), description: errorMsg, duration: 5, imageUrl: null, soundFx: '', notes: '', technicalNotes: 'N/A', atmosphere: 'N/A', ...defaultShot }], transitionType: options.transitionTypeOptions[0] });
+                        enrichedScenes.push({ ...outline, shots: [{ id: Date.now(), description: errorMsg, duration: 5, imageUrl: null, videoUrl: null, soundFx: '', notes: '', technicalNotes: 'N/A', atmosphere: 'N/A', ...defaultShot }], transitionType: options.transitionTypeOptions[0] });
                     }
                     // Brief pause to avoid rate limiting
                     await sleep(200);
@@ -587,7 +587,7 @@ export const generateStory = async (
          const finalScenes = ep.scenes.map(s => {
              if (!s.shots || s.shots.length === 0) {
                 const defaultShot = { shotType: 'Wide Shot (WS)', cameraMovement: 'Static', cameraType: 'Digital Cinema Camera', lensType: 'Standard (35mm-50mm)', lensBlur: 'None (Deep Focus)', lighting: 'Natural Light', style: 'Cinematic / Hollywood', colorGrade: 'Neutral / Natural', filmGrain: 'Clean (No Grain)', filmStock: 'Digital (None)', technicalNotes: 'Default', atmosphere: 'Default' };
-                return { ...s, shots: [{ id: Date.now(), description: 'Scene without shots.', duration: 5, imageUrl: null, soundFx: '', notes: '', ...defaultShot }], transitionType: translations[language].options.transitionTypeOptions[0] };
+                return { ...s, shots: [{ id: Date.now(), description: 'Scene without shots.', duration: 5, imageUrl: null, videoUrl: null, soundFx: '', notes: '', ...defaultShot }], transitionType: translations[language].options.transitionTypeOptions[0] };
             }
             return s;
         });
@@ -607,10 +607,22 @@ export const generateStory = async (
     };
 };
 
-export const generateVideo = async (prompt: string, image: { base64: string, mimeType: string }, aspectRatio: '16:9' | '9:16', setProgress: (messageKey: string) => void): Promise<string> => {
+export const generateVideo = async (prompt: string, image: { base64: string, mimeType: string } | null, aspectRatio: '16:9' | '9:16', setProgress: (messageKey: string) => void): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
     setProgress('loadingGeneratingVideo');
-    let operation = await ai.models.generateVideos({ model: 'veo-3.1-fast-generate-preview', prompt: prompt, image: { imageBytes: image.base64, mimeType: image.mimeType, }, config: { numberOfVideos: 1, resolution: '720p', aspectRatio: aspectRatio, } });
+    
+    const config: any = { numberOfVideos: 1, resolution: '720p', aspectRatio: aspectRatio };
+    let request: any = {
+        model: 'veo-3.1-fast-generate-preview',
+        prompt: prompt,
+        config: config
+    };
+
+    if (image) {
+        request.image = { imageBytes: image.base64, mimeType: image.mimeType };
+    }
+
+    let operation = await ai.models.generateVideos(request);
     setProgress('loadingPollingStatus');
     while (!operation.done) { await new Promise(resolve => setTimeout(resolve, 10000)); operation = await ai.operations.getVideosOperation({ operation: operation }); }
     if (!operation.response?.generatedVideos?.[0]?.video?.uri) { throw new Error("Video generation failed: No video URI returned from the API."); }

@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Storyboard AI Studio",
+  "description": "An application to build storyboards for stories that can be produced with AI. It includes features for scene creation, AI-powered image generation, a helpful chatbot, and PDF export.",
+  "requestFramePermissions": []
+}

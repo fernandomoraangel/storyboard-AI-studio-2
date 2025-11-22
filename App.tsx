@@ -521,13 +521,10 @@ export const App: React.FC = () => {
     setShowPDFModal(false);
     setIsExporting(true);
     try {
-      // If we need to generate a synopsis for a specific episode, we might need to do it inside exportStoryboardToPDF
-      // or iterate here. For now, we pass the raw data and let the PDF service handle structure.
-      
       await exportStoryboardToPDF(
           seriesTitle, 
           authorName, 
-          episodes, // Pass all episodes
+          episodes, 
           activeEpisodeId, 
           characters, 
           storyboardStyle, 
@@ -538,13 +535,34 @@ export const App: React.FC = () => {
           structuralAnalysis,
           treatment,
           references,
-          exportOptions // Pass user options
+          exportOptions
       );
     } catch (error) { 
         console.error("PDF Export failed:", error); 
         alert('PDF Export Failed. Check console for details.'); 
     } 
     finally { setIsExporting(false); }
+  };
+
+  // Consistency Check Logic
+  const handleConsistencyApply = async (settings: ConsistencySettings) => {
+        setIsCoCreating(true);
+        try {
+            const currentState = gatherState();
+            const result = await ensureStoryConsistency(currentState, language, settings);
+            applyState(result.state);
+            setPendingModification({ state: result.state, explanation: result.explanation });
+            setShowModificationModal(false); 
+            setCoCreationStatus('success');
+            setShowConsistencyModal(false);
+            alert('Consistency check complete! Explanation: ' + result.explanation);
+        } catch (error) {
+            console.error("Consistency check failed", error);
+            setCoCreationStatus('error');
+            alert(t('coCreationError'));
+        } finally {
+            setIsCoCreating(false);
+        }
   };
 
   return (
@@ -693,7 +711,9 @@ export const App: React.FC = () => {
                     episodes={episodes} 
                     onUpdateEpisodes={(newEpisodes) => {
                         setEpisodes(newEpisodes);
-                        alert(t('projectSaved'));
+                        // Trigger the consistency check modal immediately after reordering
+                        setLastConsistencySettings({ intensity: 5, weirdness: 3, instructions: 'Review logic and continuity after manual scene reordering.' });
+                        setShowConsistencyModal(true);
                     }} 
                 />
             )}
@@ -949,6 +969,15 @@ export const App: React.FC = () => {
                    </div>
               </div>
            </div>
+      )}
+
+      {showConsistencyModal && (
+          <ConsistencyModal 
+            onApply={handleConsistencyApply} 
+            onClose={() => setShowConsistencyModal(false)} 
+            isLoading={isCoCreating}
+            initialValues={lastConsistencySettings}
+          />
       )}
 
       {showFrameIOModal && (

@@ -18,6 +18,28 @@ const cleanJson = (text: string) => {
     return text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 };
 
+const createQuotaPlaceholderImage = (text: string = "Quota Exceeded"): string => {
+    // Creates a simple placeholder image data URL on the client side
+    // to prevent the app from breaking when API limits are hit.
+    if (typeof document === 'undefined') return '';
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.fillStyle = '#1f2937'; // gray-800
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#6b7280'; // gray-500
+        ctx.font = 'bold 48px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        ctx.font = '24px sans-serif';
+        ctx.fillText("Try again later", canvas.width / 2, canvas.height / 2 + 50);
+    }
+    return canvas.toDataURL('image/jpeg');
+};
+
 const generateContentWithRetry = async (params: any): Promise<GenerateContentResponse> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
     const maxRetries = 3;
@@ -32,7 +54,15 @@ const generateContentWithRetry = async (params: any): Promise<GenerateContentRes
             try { errorMessage = (JSON.stringify(error) || '').toLowerCase(); } 
             catch (e) { errorMessage = String(error).toLowerCase(); }
 
-            const isRetryable = errorMessage.includes('500') || errorMessage.includes('503') || errorMessage.includes('timeout') || errorMessage.includes('rpc failed') || errorMessage.includes('resource_exhausted') || (error.code === 429) || (error.status === 'RESOURCE_EXHAUSTED') || (error.status === 'UNKNOWN');
+            // Check for quota/rate limit errors specifically
+            const isQuotaError = errorMessage.includes('429') || errorMessage.includes('resource_exhausted') || errorMessage.includes('quota');
+            
+            if (isQuotaError) {
+                console.error("Quota exhausted for text generation.");
+                throw new Error("Quota exceeded. Please check your plan or try again later.");
+            }
+
+            const isRetryable = errorMessage.includes('500') || errorMessage.includes('503') || errorMessage.includes('timeout') || errorMessage.includes('rpc failed') || (error.status === 'UNKNOWN');
 
             if (isRetryable && attempt < maxRetries - 1) {
                 const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
@@ -47,6 +77,8 @@ const generateContentWithRetry = async (params: any): Promise<GenerateContentRes
     }
     throw new Error("Content generation failed after multiple retries.");
 };
+
+// ... (getChatTools, createChat, sendMessage, getCharactersPromptFragment, getStyleSuffix, createCharacterImagePrompt, createImagePromptForShot - SAME AS BEFORE)
 
 export const getChatTools = (language: Language): FunctionDeclaration[] => {
     const options = translations[language].options;
@@ -259,9 +291,15 @@ export const generateImage = async (prompt: string, aspectRatio: '1:1' | '3:4' |
             const errorMessage = (JSON.stringify(error) || '').toLowerCase();
             const isQuotaError = errorMessage.includes('quota') || errorMessage.includes('resource_exhausted') || (error.code === 429) || (error.status === 'RESOURCE_EXHAUSTED');
 
-            if (isQuotaError && attempt < maxRetries - 1) {
+            if (isQuotaError) {
+                // If quota is hit, stop retrying immediately and return a placeholder
+                console.warn("Quota exceeded for image generation. Returning placeholder.");
+                return createQuotaPlaceholderImage();
+            }
+
+            if (attempt < maxRetries - 1) {
                 const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-                console.warn(`Quota error on attempt ${attempt + 1}. Retrying in ${delay.toFixed(0)}ms...`);
+                console.warn(`Error on attempt ${attempt + 1}. Retrying in ${delay.toFixed(0)}ms...`);
                 await sleep(delay);
                 attempt++;
             } else {
@@ -408,6 +446,7 @@ export const generateStory = async (
     setProgress: (messageKey: string, data?: { [key: string]: string | number }) => void,
     executionPlan?: string[]
 ): Promise<{ title: string; logline: string; soundtrackPrompt: string; treatment: string; structuralAnalysis: string; references: Reference[]; characters: Omit<Character, 'id' | 'images'>[]; episodes: { title: string, synopsis: string, scenes: Omit<Scene, 'id'>[] }[]; subplots: string; narrativeArc: ArcPoint[] }> => {
+    // ... (Same implementation as before)
     const langInstruction = language === 'es' ? 'en español' : 'in English';
     const userPrompt = prompt.trim() === '' ? (language === 'es' ? 'una serie sorprendente y visualmente interesante' : 'a surprising and visually interesting series') : prompt;
     const hasSubplots = typeof subplotCount === 'number' && subplotCount > 0;
@@ -449,7 +488,6 @@ export const generateStory = async (
             context.refinedOutline.references = searchReferences;
         },
         'progressGeneratingArc': async () => {
-             // Generate the initial arc based on the core concept
              const arcPrompt = `Create a narrative arc analysis for this story: "${context.refinedOutline.logline}".
              I need ${episodeCount} data points (one per episode) representing the trajectory of:
              1. Dramatic Tension (0-10)
@@ -564,11 +602,9 @@ export const generateStory = async (
         },
         'progressOutliningEpisodes': async () => {
             if (episodeCount <= 1) {
-                // If single episode, we just create one "episode" placeholder that matches the story
                 context.episodeOutlines = [{ title: context.coreConcept.title, synopsis: context.refinedOutline.logline }];
                 return;
             }
-            // Generate multiple episode outlines
             const episodesResponse = await generateContentWithRetry({
                 model: 'gemini-3-pro-preview',
                 contents: `Create an outline for a ${episodeCount}-episode series based on: "${context.refinedOutline.logline}" and treatment "${context.refinedOutline.treatment}". Provide a title and synopsis for each episode. Return JSON in ${langInstruction}.`,
@@ -580,21 +616,15 @@ export const generateStory = async (
             context.episodeOutlines = JSON.parse(cleanJson(episodesResponse.text.trim())).episodes;
         },
         'progressOutliningScenes': async () => {
-            // Generate detailed scene outlines for ALL episodes
             if (!context.episodeOutlines || context.episodeOutlines.length === 0) return;
-            
             context.fullEpisodes = [];
-
             for (const [index, ep] of context.episodeOutlines.entries()) {
                 const promptContent = `Outline exactly ${sceneCount} scenes for Episode ${index + 1}: "${ep.title}" (Synopsis: ${ep.synopsis}). Narrative Structure: '${structureInstruction}'. Characters: ${context.characters.map(c => c.name).join(', ')}. Return JSON in ${langInstruction}.`;
-                
                 const schemaConfig = {
                     responseMimeType: 'application/json',
                     responseSchema: { type: Type.OBJECT, properties: { scenes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, location: { type: Type.STRING }, characters: { type: Type.STRING }, setting: { type: Type.STRING }, dialogueType: { type: Type.STRING, enum: ['dialogue', 'mos'] }, dialogue: { type: Type.STRING }, musicPrompt: { type: Type.STRING }, keyObjects: { type: Type.STRING }, actions: { type: Type.STRING }, tone: { type: Type.STRING }, notes: { type: Type.STRING } }, required: ["title", "location", "characters", "setting", "dialogueType", "dialogue", "musicPrompt", "keyObjects", "actions", "tone", "notes"] } } }, required: ["scenes"] }
                 };
-
                 try {
-                    // Try Pro model first
                     const sceneOutlinesResponse = await generateContentWithRetry({
                         model: 'gemini-3-pro-preview',
                         contents: promptContent,
@@ -605,7 +635,6 @@ export const generateStory = async (
                 } catch (e) {
                     console.warn(`Pro model failed for outlining scenes in Ep ${index + 1}, trying fallback...`, e);
                     try {
-                        // Fallback to Flash model if Pro fails
                         const sceneOutlinesResponse = await generateContentWithRetry({
                             model: 'gemini-2.5-flash',
                             contents: promptContent,
@@ -615,7 +644,6 @@ export const generateStory = async (
                         context.fullEpisodes.push({ ...ep, scenes });
                     } catch (fallbackError) {
                          console.error(`Failed to outline scenes for episode ${index + 1} with fallback`, fallbackError);
-                         // Critical error: we cannot proceed with empty scenes for an episode
                          throw new Error(`Failed to generate scenes for Episode ${index + 1}. Please try again.`);
                     }
                 }
@@ -623,7 +651,6 @@ export const generateStory = async (
         },
         'progressGeneratingShots': async () => {
             if (!context.fullEpisodes || context.fullEpisodes.length === 0) return;
-            
             const options = translations[language]?.options || translations['en'].options;
             const defaultShot = { shotType: 'Wide Shot (WS)', cameraMovement: 'Static', cameraType: 'Digital Cinema Camera', lensType: 'Standard (35mm-50mm)', lensBlur: 'None (Deep Focus)', lighting: 'Natural Light', style: 'Cinematic / Hollywood', colorGrade: 'Neutral / Natural', filmGrain: 'Clean (No Grain)', filmStock: 'Digital (None)', };
 
@@ -632,7 +659,6 @@ export const generateStory = async (
                 for (const outline of ep.scenes) {
                     setProgress('progressGeneratingShotsFor', { title: outline.title });
                     try {
-                        // Using gemini-2.5-flash for shots to be faster and save quota on large series
                         const shotsResponse = await generateContentWithRetry({
                             model: 'gemini-2.5-flash', 
                             contents: `Create 2-4 detailed shots for scene "${outline.title}": "${outline.actions}". Return JSON in ${langInstruction}.`,
@@ -652,7 +678,6 @@ export const generateStory = async (
                         const errorMsg = language === 'es' ? 'La generación falló. Por favor edite manualmente.' : 'Generation failed. Please edit manually.';
                         enrichedScenes.push({ ...outline, shots: [{ id: Date.now(), description: errorMsg, duration: 5, imageUrl: null, videoUrl: null, soundFx: '', notes: '', technicalNotes: 'N/A', atmosphere: 'N/A', ...defaultShot }], transitionType: options.transitionTypeOptions[0] });
                     }
-                    // Brief pause to avoid rate limiting
                     await sleep(200);
                 }
                 ep.scenes = enrichedScenes;
@@ -682,8 +707,6 @@ export const generateStory = async (
                 await stepExecutors[stepKey](); 
             } catch (e) { 
                 console.error(`Error during step ${stepKey}:`, e); 
-                
-                // Critical steps must throw to stop the generation and inform the user
                 const criticalSteps = ['progressGeneratingCore', 'progressCreatingCharacters', 'progressOutliningEpisodes', 'progressOutliningScenes'];
                 if (criticalSteps.includes(stepKey)) {
                      throw e;
@@ -692,7 +715,6 @@ export const generateStory = async (
         }
     }
 
-    // Assemble the final episodes structure from context.fullEpisodes
     const finalEpisodes = context.fullEpisodes.map((ep) => {
          const finalScenes = ep.scenes.map(s => {
              if (!s.shots || s.shots.length === 0) {
@@ -765,9 +787,106 @@ export const translateDetailsToEnglish = async (details: { [key: string]: string
 };
 
 export const ensureStoryConsistency = async (currentState: ProjectState, language: Language, settings?: { intensity: number; weirdness: number; instructions: string }): Promise<{ state: ProjectState; explanation: string }> => {
-   // Simplified to prevent breaking existing features. Full hierarchy support requires deeper refactoring.
-   // For now, return the state as is or handle only basic properties.
-   return { state: currentState, explanation: "Consistency check for full Series hierarchy not yet fully implemented." };
+    const langInstruction = language === 'es' ? 'en español' : 'in English';
+    const instructions = settings?.instructions || 'Fix continuity errors caused by reordering.';
+    
+    // Minimize payload: Send simplified episode/scene structure
+    const simplifiedEpisodes = currentState.episodes.map(ep => ({
+        id: ep.id,
+        title: ep.title,
+        scenes: ep.scenes.map(s => ({
+            id: s.id,
+            title: s.title,
+            actions: s.actions,
+            dialogue: s.dialogue,
+            characters: s.characters,
+            location: s.location,
+            notes: s.notes
+        }))
+    }));
+
+    const prompt = `
+    The user has completely reordered the scenes and episodes of this story. 
+    Task: Analyze the new flow for logical continuity errors (e.g. characters appearing before they are introduced, dead characters appearing alive, plot points happening out of order).
+    
+    User Instructions: ${instructions}
+    Intensity: ${settings?.intensity || 5}/10.
+    
+    Rewrite the 'actions', 'dialogue', and 'notes' of the scenes to fix these errors and ensure a coherent narrative flow in this new order.
+    DO NOT change the order of scenes or episodes. DO NOT change IDs.
+    
+    Input Story Structure:
+    ${JSON.stringify(simplifiedEpisodes)}
+    
+    Return JSON with:
+    1. 'explanation': A brief summary of what was fixed.
+    2. 'episodes': The updated array of episodes with the same structure as input (id, title, scenes: [{id, title, actions, dialogue, characters, location, notes}]).
+    
+    Response must be ${langInstruction}.
+    `;
+
+    const response = await generateContentWithRetry({
+        model: 'gemini-3-pro-preview',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    explanation: { type: Type.STRING },
+                    episodes: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                id: { type: Type.NUMBER },
+                                title: { type: Type.STRING },
+                                scenes: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            id: { type: Type.NUMBER },
+                                            title: { type: Type.STRING },
+                                            actions: { type: Type.STRING },
+                                            dialogue: { type: Type.STRING },
+                                            characters: { type: Type.STRING },
+                                            location: { type: Type.STRING },
+                                            notes: { type: Type.STRING }
+                                        },
+                                        required: ['id', 'title', 'actions', 'dialogue', 'characters', 'location', 'notes']
+                                    }
+                                }
+                            },
+                            required: ['id', 'title', 'scenes']
+                        }
+                    }
+                },
+                required: ['explanation', 'episodes']
+            }
+        }
+    });
+
+    const result = JSON.parse(cleanJson(response.text.trim()));
+    
+    // Merge updates back into full state (preserving shots)
+    const updatedEpisodes = currentState.episodes.map(originalEp => {
+        const updatedEpData = result.episodes.find((e: any) => e.id === originalEp.id);
+        if (!updatedEpData) return originalEp;
+
+        const updatedScenes = originalEp.scenes.map(originalScene => {
+            const updatedSceneData = updatedEpData.scenes.find((s: any) => s.id === originalScene.id);
+            if (!updatedSceneData) return originalScene;
+            return { ...originalScene, ...updatedSceneData };
+        });
+
+        return { ...originalEp, scenes: updatedScenes };
+    });
+
+    return { 
+        state: { ...currentState, episodes: updatedEpisodes }, 
+        explanation: result.explanation 
+    };
 };
 
 export const modifyStory = async (currentState: ProjectState, settings: ModificationSettings, language: Language): Promise<{ state: ProjectState; explanation: string }> => {

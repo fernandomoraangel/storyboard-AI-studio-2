@@ -22,7 +22,7 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
     const [draftEpisodes, setDraftEpisodes] = useState<Episode[]>(JSON.parse(JSON.stringify(episodes)));
     const [openEpisodes, setOpenEpisodes] = useState<Record<number, boolean>>({});
 
-    // Reset draft when external episodes change (if not dirty? simpler to just reset on mount or manual reset)
+    // Reset draft when external episodes change
     useEffect(() => {
         setDraftEpisodes(JSON.parse(JSON.stringify(episodes)));
         // Default open all episodes
@@ -32,11 +32,14 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
     }, [episodes]);
 
     const handleUndo = () => {
-        setDraftEpisodes(JSON.parse(JSON.stringify(episodes)));
+        if (window.confirm(t('undoReorganization') + '?')) {
+            setDraftEpisodes(JSON.parse(JSON.stringify(episodes)));
+        }
     };
 
     const handleSave = () => {
-        onUpdateEpisodes(draftEpisodes);
+        // Deep copy to ensure state updates trigger correctly in parent
+        onUpdateEpisodes(JSON.parse(JSON.stringify(draftEpisodes)));
     };
 
     const toggleEpisode = (id: number) => {
@@ -48,15 +51,47 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
     const dragOverItem = useRef<{ type: string; id: number; parentId?: number; index: number } | null>(null);
 
     const handleDragStart = (e: React.DragEvent, type: string, id: number, index: number, parentId?: number) => {
+        e.stopPropagation(); // Crucial: Prevents parent draggable elements (Episode) from catching the event
         dragItem.current = { type, id, index, parentId };
         e.dataTransfer.effectAllowed = 'move';
-        // HTML5 drag image handling is automatic, but we can customize if needed
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type, id })); // Required for Firefox
     };
 
     const handleDragOver = (e: React.DragEvent, type: string, id: number, index: number, parentId?: number) => {
         e.preventDefault(); // Necessary to allow dropping
-        e.stopPropagation();
-        dragOverItem.current = { type, id, index, parentId };
+        
+        const dragged = dragItem.current;
+        if (!dragged) return;
+
+        // --- SCENE DRAGGING ---
+        if (dragged.type === ITEM_TYPES.SCENE) {
+             // If hovering over a SCENE or EPISODE, claim the drop
+             if (type === ITEM_TYPES.SCENE || type === ITEM_TYPES.EPISODE) {
+                 e.stopPropagation();
+                 dragOverItem.current = { type, id, index, parentId };
+             }
+             // If hovering over a SHOT, do NOT stop propagation. Let it bubble up to the SCENE container.
+             return;
+        }
+        
+        // --- SHOT DRAGGING ---
+        if (dragged.type === ITEM_TYPES.SHOT) {
+             // If hovering over a SHOT or SCENE, claim the drop
+             if (type === ITEM_TYPES.SHOT || type === ITEM_TYPES.SCENE) {
+                 e.stopPropagation();
+                 dragOverItem.current = { type, id, index, parentId };
+             }
+             return;
+        }
+
+        // --- EPISODE DRAGGING ---
+        if (dragged.type === ITEM_TYPES.EPISODE) {
+            // Only drop on EPISODE
+            if (type === ITEM_TYPES.EPISODE) {
+                e.stopPropagation();
+                dragOverItem.current = { type, id, index, parentId };
+            }
+        }
     };
 
     const handleDrop = (e: React.DragEvent) => {
@@ -67,94 +102,50 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
         const target = dragOverItem.current;
 
         if (!source || !target) return;
+        
+        // Optimization: If dropping on self, do nothing
+        if (source.type === target.type && source.index === target.index && source.parentId === target.parentId) return;
 
         // Clone the state
         const newEpisodes = JSON.parse(JSON.stringify(draftEpisodes)) as Episode[];
 
-        // 1. Reorder Episodes
+        // --- 1. REORDER EPISODES ---
         if (source.type === ITEM_TYPES.EPISODE && target.type === ITEM_TYPES.EPISODE) {
             const item = newEpisodes.splice(source.index, 1)[0];
             newEpisodes.splice(target.index, 0, item);
             setDraftEpisodes(newEpisodes);
         }
 
-        // 2. Reorder Scenes (Same Episode)
-        else if (source.type === ITEM_TYPES.SCENE && target.type === ITEM_TYPES.SCENE && source.parentId === target.parentId) {
-            const epIndex = newEpisodes.findIndex(e => e.id === source.parentId);
-            if (epIndex > -1) {
-                const item = newEpisodes[epIndex].scenes.splice(source.index, 1)[0];
-                newEpisodes[epIndex].scenes.splice(target.index, 0, item);
-                setDraftEpisodes(newEpisodes);
-            }
-        }
-        
-        // 3. Move Scene to Different Episode (Target is Scene in another Ep)
-        else if (source.type === ITEM_TYPES.SCENE && target.type === ITEM_TYPES.SCENE && source.parentId !== target.parentId) {
-            const sourceEpIndex = newEpisodes.findIndex(e => e.id === source.parentId);
-            const targetEpIndex = newEpisodes.findIndex(e => e.id === target.parentId);
-            
-            if (sourceEpIndex > -1 && targetEpIndex > -1) {
-                const item = newEpisodes[sourceEpIndex].scenes.splice(source.index, 1)[0];
-                newEpisodes[targetEpIndex].scenes.splice(target.index, 0, item);
-                setDraftEpisodes(newEpisodes);
-            }
-        }
-
-        // 4. Move Scene to Episode (Target is Episode Header)
-        else if (source.type === ITEM_TYPES.SCENE && target.type === ITEM_TYPES.EPISODE) {
-            const sourceEpIndex = newEpisodes.findIndex(e => e.id === source.parentId);
-            const targetEpIndex = newEpisodes.findIndex(e => e.id === target.id); // Target ID is Episode ID
-             if (sourceEpIndex > -1 && targetEpIndex > -1) {
-                 const item = newEpisodes[sourceEpIndex].scenes.splice(source.index, 1)[0];
-                 // Append to end of target episode
-                 newEpisodes[targetEpIndex].scenes.push(item);
-                 setDraftEpisodes(newEpisodes);
-             }
-        }
-
-        // 5. Reorder Shots (Same Scene)
-        else if (source.type === ITEM_TYPES.SHOT && target.type === ITEM_TYPES.SHOT && source.parentId === target.parentId) {
-             // We need to find the scene. ParentId for Shot is SceneId.
-             // We must traverse episodes to find the scene.
-             for (const ep of newEpisodes) {
-                 const sceneIndex = ep.scenes.findIndex(s => s.id === source.parentId);
-                 if (sceneIndex > -1) {
-                     const item = ep.scenes[sceneIndex].shots.splice(source.index, 1)[0];
-                     ep.scenes[sceneIndex].shots.splice(target.index, 0, item);
-                     break; 
-                 }
-             }
-             setDraftEpisodes(newEpisodes);
-        }
-        
-        // 6. Move Shot to Different Scene (Target is Shot in another Scene)
-        else if (source.type === ITEM_TYPES.SHOT && target.type === ITEM_TYPES.SHOT && source.parentId !== target.parentId) {
-            let item: Shot | null = null;
+        // --- 2. REORDER SCENES ---
+        else if (source.type === ITEM_TYPES.SCENE) {
             // Remove from source
-            for (const ep of newEpisodes) {
-                const sIndex = ep.scenes.findIndex(s => s.id === source.parentId);
-                if (sIndex > -1) {
-                    item = ep.scenes[sIndex].shots.splice(source.index, 1)[0];
-                    break;
-                }
-            }
+            const sourceEpIndex = newEpisodes.findIndex(e => e.id === source.parentId);
+            if (sourceEpIndex === -1) return;
+            const item = newEpisodes[sourceEpIndex].scenes.splice(source.index, 1)[0];
+
             // Add to target
-            if (item) {
-                 for (const ep of newEpisodes) {
-                    const sIndex = ep.scenes.findIndex(s => s.id === target.parentId);
-                    if (sIndex > -1) {
-                        ep.scenes[sIndex].shots.splice(target.index, 0, item);
-                        break;
-                    }
+            if (target.type === ITEM_TYPES.SCENE) {
+                // Dropped on another Scene
+                const targetEpIndex = newEpisodes.findIndex(e => e.id === target.parentId);
+                if (targetEpIndex > -1) {
+                    newEpisodes[targetEpIndex].scenes.splice(target.index, 0, item);
+                    setDraftEpisodes(newEpisodes);
                 }
-                setDraftEpisodes(newEpisodes);
+            } else if (target.type === ITEM_TYPES.EPISODE) {
+                // Dropped on Episode Header -> Append to end or start? Let's say dragOverItem index is the episode index
+                const targetEpIndex = newEpisodes.findIndex(e => e.id === target.id);
+                if (targetEpIndex > -1) {
+                    // Append to end of list if dropped on header
+                    newEpisodes[targetEpIndex].scenes.push(item);
+                    setDraftEpisodes(newEpisodes);
+                }
             }
         }
-        
-        // 7. Move Shot to Scene (Target is Scene Header)
-        else if (source.type === ITEM_TYPES.SHOT && target.type === ITEM_TYPES.SCENE) {
-             let item: Shot | null = null;
-             // Remove
+
+        // --- 3. REORDER SHOTS ---
+        else if (source.type === ITEM_TYPES.SHOT) {
+            // Find and remove Item from source
+            let item: Shot | null = null;
             for (const ep of newEpisodes) {
                 const sIndex = ep.scenes.findIndex(s => s.id === source.parentId);
                 if (sIndex > -1) {
@@ -162,16 +153,30 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
                     break;
                 }
             }
-            // Add
-            if (item) {
+
+            if (!item) return;
+
+            // Add to target
+            if (target.type === ITEM_TYPES.SHOT) {
+                 // Dropped on another Shot
                  for (const ep of newEpisodes) {
-                    const sIndex = ep.scenes.findIndex(s => s.id === target.id); // Target ID is Scene ID
-                    if (sIndex > -1) {
-                        ep.scenes[sIndex].shots.push(item);
-                        break;
-                    }
-                }
-                setDraftEpisodes(newEpisodes);
+                     const sIndex = ep.scenes.findIndex(s => s.id === target.parentId);
+                     if (sIndex > -1) {
+                         ep.scenes[sIndex].shots.splice(target.index, 0, item);
+                         setDraftEpisodes(newEpisodes);
+                         return;
+                     }
+                 }
+            } else if (target.type === ITEM_TYPES.SCENE) {
+                // Dropped on Scene Header -> Append to end of scene
+                 for (const ep of newEpisodes) {
+                     const sIndex = ep.scenes.findIndex(s => s.id === target.id);
+                     if (sIndex > -1) {
+                         ep.scenes[sIndex].shots.push(item);
+                         setDraftEpisodes(newEpisodes);
+                         return;
+                     }
+                 }
             }
         }
 
@@ -196,7 +201,7 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-7xl mx-auto">
             <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                 <div className="flex justify-between items-center mb-6">
                     <div>
@@ -216,7 +221,7 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
                         </button>
                         <button 
                             onClick={handleSave}
-                            className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-4 py-2 transition-colors"
+                            className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-4 py-2 transition-colors shadow-lg shadow-indigo-500/20"
                         >
                             <FloppyDiskIcon className="w-4 h-4 mr-2" />
                             {t('updateStoryOrder')}
@@ -239,7 +244,7 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
                             >
                                 {/* Episode Header */}
                                 <div 
-                                    className="p-4 bg-gray-800 flex items-center gap-4 cursor-pointer"
+                                    className="p-4 bg-gray-800 flex items-center gap-4 cursor-pointer select-none"
                                     onClick={() => toggleEpisode(episode.id)}
                                 >
                                     <div className="w-12 h-12 bg-gray-900 rounded overflow-hidden flex-shrink-0 border border-gray-700">
@@ -266,19 +271,19 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
                                                 onDragStart={(e) => handleDragStart(e, ITEM_TYPES.SCENE, scene.id, scIndex, episode.id)}
                                                 onDragOver={(e) => handleDragOver(e, ITEM_TYPES.SCENE, scene.id, scIndex, episode.id)}
                                                 onDrop={handleDrop}
-                                                className="bg-gray-800 rounded-md border border-gray-700 flex flex-col overflow-hidden group hover:border-indigo-500/50 transition-colors"
+                                                className="bg-gray-800 rounded-md border border-gray-700 flex flex-col overflow-hidden group hover:border-indigo-500/50 transition-colors relative"
                                             >
-                                                <div className="relative aspect-video bg-black">
+                                                <div className="relative aspect-video bg-black cursor-grab active:cursor-grabbing">
                                                      {getSceneImage(scene) ? (
-                                                        <img src={getSceneImage(scene)!} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" alt="Scene" />
+                                                        <img src={getSceneImage(scene)!} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity pointer-events-none" alt="Scene" />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-gray-700"><ClapperboardIcon className="w-8 h-8"/></div>
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-700 pointer-events-none"><ClapperboardIcon className="w-8 h-8"/></div>
                                                     )}
-                                                    <div className="absolute top-0 left-0 bg-black/70 px-2 py-1 text-xs font-bold text-white rounded-br">
+                                                    <div className="absolute top-0 left-0 bg-black/70 px-2 py-1 text-xs font-bold text-white rounded-br pointer-events-none">
                                                         {scIndex + 1}
                                                     </div>
                                                 </div>
-                                                <div className="p-2 border-t border-gray-700">
+                                                <div className="p-2 border-t border-gray-700 pointer-events-none">
                                                     <p className="text-sm font-semibold truncate text-gray-200" title={scene.title}>{scene.title}</p>
                                                     <p className="text-xs text-gray-500">{scene.shots.length} {t('shot')}(s)</p>
                                                 </div>
@@ -289,16 +294,16 @@ export const VisualOrganizer: React.FC<VisualOrganizerProps> = ({ episodes, onUp
                                                         <div
                                                             key={shot.id}
                                                             draggable
-                                                            onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, ITEM_TYPES.SHOT, shot.id, shIndex, scene.id); }}
-                                                            onDragOver={(e) => { e.stopPropagation(); handleDragOver(e, ITEM_TYPES.SHOT, shot.id, shIndex, scene.id); }}
+                                                            onDragStart={(e) => handleDragStart(e, ITEM_TYPES.SHOT, shot.id, shIndex, scene.id)}
+                                                            onDragOver={(e) => handleDragOver(e, ITEM_TYPES.SHOT, shot.id, shIndex, scene.id)}
                                                             onDrop={handleDrop}
-                                                            className="aspect-square bg-gray-700 rounded-sm overflow-hidden border border-gray-600 hover:border-white cursor-grab relative"
+                                                            className="aspect-square bg-gray-700 rounded-sm overflow-hidden border border-gray-600 hover:border-white cursor-grab active:cursor-grabbing relative"
                                                             title={shot.description}
                                                         >
                                                             {shot.imageUrl ? (
-                                                                <img src={shot.imageUrl} className="w-full h-full object-cover" alt="Shot" />
+                                                                <img src={shot.imageUrl} className="w-full h-full object-cover pointer-events-none" alt="Shot" />
                                                             ) : (
-                                                                <div className="w-full h-full flex items-center justify-center text-gray-500 text-[8px]">{shIndex + 1}</div>
+                                                                <div className="w-full h-full flex items-center justify-center text-gray-500 text-[8px] pointer-events-none">{shIndex + 1}</div>
                                                             )}
                                                         </div>
                                                     ))}

@@ -330,7 +330,7 @@ export const exportStoryboardToPDF = async (
          addMetaItem(t('storyboardStyleLabel'), storyboardStyle);
          addMetaItem(t('aspectRatioLabel'), aspectRatio);
          addMetaItem(t('numberOfEpisodes'), episodes.length.toString());
-         addMetaItem(t('numberOfCharacters'), characters.length.toString());
+         addMetaItem(t('characters'), characters.length.toString());
          if (soundtrackPrompt) {
              addMetaItem(t('pdfSoundtrackPrompt'), soundtrackPrompt);
          }

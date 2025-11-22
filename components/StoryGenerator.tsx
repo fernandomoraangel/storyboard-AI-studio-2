@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef } from 'react';
 import type { Scene, Character, Reference, ArcPoint, Episode } from '../types';
 import { generateStory } from '../services/geminiService';
@@ -238,11 +239,23 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
 
         // Filter steps that are enabled
         const activeSteps = configSteps.filter(s => s.enabled);
-        // Note: We MUST include 'progressOutliningEpisodes' even for single episodes, 
-        // as the service layer uses it to initialize the episode data structure.
-
         const executionPlan = activeSteps.map(s => s.key);
         
+        // CRITICAL: We MUST include 'progressOutliningEpisodes' even if unchecked,
+        // because the service layer logic depends on context.episodeOutlines being populated.
+        // We push it to the plan if missing, ensuring it runs before scene outlining.
+        // To be safe, we can rebuild the plan based on default order but enforcing mandatory steps.
+        
+        const mandatorySteps = ['progressOutliningEpisodes'];
+        const finalPlan: string[] = [];
+        
+        // Reconstruct plan preserving order
+        for (const step of defaultSteps) {
+            if (activeSteps.find(s => s.key === step.key) || mandatorySteps.includes(step.key)) {
+                finalPlan.push(step.key);
+            }
+        }
+
         setCurrentProgressKey('');
         setShowProgressModal(true);
         
@@ -266,7 +279,7 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
                 finalSubplotCount,
                 finalEpisodeCount,
                 setProgress,
-                executionPlan
+                finalPlan
             );
             setPreview(result);
             setShowProgressModal(false);

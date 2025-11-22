@@ -174,6 +174,13 @@ export const translations: Record<Language, Translations> = {
     rewriteStoryFromArc: "Update Story from Arc",
     rewritingStory: "Rewriting Story...",
 
+    // Visual Organizer
+    visualOrganizerTitle: "Visual Organizer",
+    visualOrganizerDescription: "Drag and drop episodes, scenes, and shots to reorganize your story flow.",
+    updateStoryOrder: "Update Story Order",
+    undoReorganization: "Undo Changes",
+    noEpisodes: "No episodes available.",
+
     // Frame.io
     frameIOTokenSetup: "Frame.io Setup",
     setupInstructions_token_1: "To export to Frame.io, you need a Developer Token.",
@@ -749,6 +756,13 @@ export const translations: Record<Language, Translations> = {
     rewriteStoryFromArc: "Actualizar Historia desde el Arco",
     rewritingStory: "Reescribiendo Historia...",
 
+    // Visual Organizer
+    visualOrganizerTitle: "Organizador Visual",
+    visualOrganizerDescription: "Arrastra y suelta episodios, escenas y planos para reorganizar el flujo de tu historia.",
+    updateStoryOrder: "Actualizar Orden de la Historia",
+    undoReorganization: "Deshacer Cambios",
+    noEpisodes: "No hay episodios disponibles.",
+
     // Frame.io
     frameIOTokenSetup: "Configuración de Frame.io",
     setupInstructions_token_1: "Para exportar a Frame.io, necesitas un Token de Desarrollador.",
@@ -1126,7 +1140,7 @@ export const translations: Record<Language, Translations> = {
         ],
         narrativeStructureOptions: {
             threeAct: 'Estructura de Tres Actos',
-            herosJourney: "El Viaje del Héroe (Monomito)",
+            herosJourney: "El Viaje del Héroe (Monomyth)",
             sevenPoint: 'Estructura de Siete Puntos',
             fichteanCurve: 'Curva Fichteana',
             kishotenketsu: 'Kishotenketsu',

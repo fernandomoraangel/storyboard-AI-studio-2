@@ -8,6 +8,13 @@ import { ModificationSettings } from "../components/ModificationModal";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const cleanJson = (text: string) => {
+    // Aggressive cleaning to find the JSON object boundaries
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        return text.substring(firstBrace, lastBrace + 1);
+    }
+    // Fallback cleanup for simple markdown wrapping
     return text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 };
 
@@ -450,34 +457,39 @@ export const generateStory = async (
              3. Conflict Level (0-10)
              Return JSON array 'points' where each point has { label: "Episode X", tension: number, emotion: number, conflict: number }.`;
              
-             const arcResponse = await generateContentWithRetry({
-                model: 'gemini-2.5-flash',
-                contents: arcPrompt,
-                config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            points: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        label: { type: Type.STRING },
-                                        tension: { type: Type.NUMBER },
-                                        emotion: { type: Type.NUMBER },
-                                        conflict: { type: Type.NUMBER }
-                                    },
-                                    required: ['label', 'tension', 'emotion', 'conflict']
-                                }
-                            }
-                        },
-                        required: ['points']
-                    }
-                }
-             });
-             const arcData = JSON.parse(cleanJson(arcResponse.text.trim())).points;
-             context.narrativeArc = arcData.map((p: any, i: number) => ({ ...p, id: i }));
+             try {
+                const arcResponse = await generateContentWithRetry({
+                   model: 'gemini-2.5-flash',
+                   contents: arcPrompt,
+                   config: {
+                       responseMimeType: 'application/json',
+                       responseSchema: {
+                           type: Type.OBJECT,
+                           properties: {
+                               points: {
+                                   type: Type.ARRAY,
+                                   items: {
+                                       type: Type.OBJECT,
+                                       properties: {
+                                           label: { type: Type.STRING },
+                                           tension: { type: Type.NUMBER },
+                                           emotion: { type: Type.NUMBER },
+                                           conflict: { type: Type.NUMBER }
+                                       },
+                                       required: ['label', 'tension', 'emotion', 'conflict']
+                                   }
+                               }
+                           },
+                           required: ['points']
+                       }
+                   }
+                });
+                const arcData = JSON.parse(cleanJson(arcResponse.text.trim())).points;
+                context.narrativeArc = arcData.map((p: any, i: number) => ({ ...p, id: i }));
+             } catch (e) {
+                 console.warn("Failed to generate narrative arc, skipping this step.", e);
+                 context.narrativeArc = [];
+             }
         },
         'progressRefiningStory': async () => {
             if (context.refinedOutline.references.length === 0) return;

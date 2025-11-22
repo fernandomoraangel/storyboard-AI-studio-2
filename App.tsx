@@ -7,8 +7,9 @@ import { EpisodeList } from './components/EpisodeList';
 import { CharacterDesigner } from './components/CharacterDesigner';
 import { StoryGenerator } from './components/StoryGenerator';
 import { NarrativeArcEditor } from './components/NarrativeArcEditor';
+import { VisualOrganizer } from './components/VisualOrganizer';
 import type { Scene, Character, Reference, Shot, StoryboardStyle, ProjectMeta, CustomStyle, CustomStyleImage, Episode, ProjectState, ArcPoint } from './types';
-import { FilmIcon, PlusIcon, DownloadIcon, UserIcon, BookOpenIcon, TrashIcon, FloppyDiskIcon, FolderOpenIcon, ShareIcon, WandIcon, VideoIcon, CheckCircleIcon, RowsIcon, ActivityIcon } from './components/icons';
+import { FilmIcon, PlusIcon, DownloadIcon, UserIcon, BookOpenIcon, TrashIcon, FloppyDiskIcon, FolderOpenIcon, ShareIcon, WandIcon, VideoIcon, CheckCircleIcon, RowsIcon, ActivityIcon, LayoutGridIcon } from './components/icons';
 import { createImagePromptForShot, generateImage, generateSynopsis, createCharacterImagePrompt, ensureStoryConsistency, modifyStory } from './services/geminiService';
 import { exportStoryboardToPDF } from './services/pdfService';
 import { translations, Language } from './lib/translations';
@@ -24,7 +25,7 @@ import { LanguageContext } from './contexts/languageContext';
 import { VideoGenerator } from './components/VideoGenerator';
 import { PDFExportModal, PDFExportOptions } from './components/PDFExportModal';
 
-type WorkflowPhase = 'bible' | 'arc' | 'episodes' | 'storyboard' | 'generator' | 'export';
+type WorkflowPhase = 'bible' | 'arc' | 'organizer' | 'episodes' | 'storyboard' | 'generator' | 'export';
 
 type GenerationJob = {
     type: 'character' | 'shot';
@@ -564,6 +565,9 @@ export const App: React.FC = () => {
             <button onClick={() => setWorkflowPhase('arc')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'arc' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
                 <ActivityIcon className="w-5 h-5" /> Narrative Arc
             </button>
+             <button onClick={() => setWorkflowPhase('organizer')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'organizer' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
+                <LayoutGridIcon className="w-5 h-5" /> Visual Organizer
+            </button>
             <button onClick={() => setWorkflowPhase('episodes')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'episodes' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
                 <RowsIcon className="w-5 h-5" /> Episodes
             </button>
@@ -681,6 +685,16 @@ export const App: React.FC = () => {
                         }));
                         alert('Story updated based on new narrative arc!');
                     }}
+                />
+            )}
+
+            {workflowPhase === 'organizer' && (
+                <VisualOrganizer 
+                    episodes={episodes} 
+                    onUpdateEpisodes={(newEpisodes) => {
+                        setEpisodes(newEpisodes);
+                        alert(t('projectSaved'));
+                    }} 
                 />
             )}
 

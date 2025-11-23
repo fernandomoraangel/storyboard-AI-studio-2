@@ -1,6 +1,7 @@
 
 
-import React, { useState, useRef } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 import type { Scene, Character, Reference, ArcPoint, Episode } from '../types';
 import { generateStory } from '../services/geminiService';
 import { WandIcon, GripVerticalIcon } from './icons';
@@ -46,6 +47,7 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
     const [maxShotDuration, setMaxShotDuration] = useState<number | ''>(8);
     const [subplotCount, setSubplotCount] = useState<number | ''>('');
     const [narrativeStructure, setNarrativeStructure] = useState('');
+    const [selectedSubElements, setSelectedSubElements] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [preview, setPreview] = useState<StoryPreview | null>(null);
@@ -72,6 +74,21 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
     const [configSteps, setConfigSteps] = useState<GenerationStepConfig[]>(defaultSteps);
     const [currentProgressKey, setCurrentProgressKey] = useState('');
     const [modalTitle, setModalTitle] = useState('');
+
+    const handleNarrativeStructureChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setNarrativeStructure(e.target.value);
+        setSelectedSubElements([]); // Reset sub elements when structure changes
+    };
+
+    const toggleSubElement = (element: string) => {
+        setSelectedSubElements(prev => {
+            if (prev.includes(element)) {
+                return prev.filter(e => e !== element);
+            } else {
+                return [...prev, element];
+            }
+        });
+    };
 
     const handleSceneCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
@@ -239,17 +256,14 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
 
         // Filter steps that are enabled
         const activeSteps = configSteps.filter(s => s.enabled);
-        const executionPlan = activeSteps.map(s => s.key);
         
-        // CRITICAL: We MUST include 'progressOutliningEpisodes' even if unchecked,
-        // because the service layer logic depends on context.episodeOutlines being populated.
-        // We push it to the plan if missing, ensuring it runs before scene outlining.
-        // To be safe, we can rebuild the plan based on default order but enforcing mandatory steps.
-        
-        const mandatorySteps = ['progressOutliningEpisodes'];
+        // CRITICAL: Force essential steps to ensure the Gemini service receives expected data.
+        // Without 'progressGeneratingCore', 'progressOutliningEpisodes', and 'progressOutliningScenes',
+        // the data structure is incomplete and the process fails.
+        const mandatorySteps = ['progressGeneratingCore', 'progressOutliningEpisodes', 'progressOutliningScenes'];
         const finalPlan: string[] = [];
         
-        // Reconstruct plan preserving order
+        // Reconstruct plan preserving order, ensuring mandatory steps are present
         for (const step of defaultSteps) {
             if (activeSteps.find(s => s.key === step.key) || mandatorySteps.includes(step.key)) {
                 finalPlan.push(step.key);
@@ -279,7 +293,8 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
                 finalSubplotCount,
                 finalEpisodeCount,
                 setProgress,
-                finalPlan
+                finalPlan,
+                selectedSubElements // Pass selected sub-elements
             );
             setPreview(result);
             setShowProgressModal(false);
@@ -287,7 +302,7 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
             const e = err as Error;
             console.error('Story generation failed:', e);
             setError(e.message);
-            setShowProgressModal(true); // Keep modal open to show error
+            // Do not close progress modal on error so user can see the message
         } finally {
             setIsLoading(false);
         }
@@ -349,6 +364,16 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
         newSteps[index].enabled = !newSteps[index].enabled;
         setConfigSteps(newSteps);
     }
+
+    // Check if current structure has sub-options
+    const currentSubOptions = options.structureSubOptions && options.structureSubOptions[narrativeStructure] 
+        ? options.structureSubOptions[narrativeStructure] 
+        : null;
+
+    // Get description for the current structure
+    const currentStructureDescription = (options.narrativeStructureDescriptions && narrativeStructure) 
+        ? options.narrativeStructureDescriptions[narrativeStructure] 
+        : null;
 
     return (
         <div className="space-y-6">
@@ -514,15 +539,55 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
                                 <select
                                     id="narrative-structure"
                                     value={narrativeStructure}
-                                    onChange={(e) => setNarrativeStructure(e.target.value)}
+                                    onChange={handleNarrativeStructureChange}
                                     className="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6 h-10"
                                 >
                                     {Object.entries(options.narrativeStructureOptions).map(([value, label]) => (
-                                        <option key={value} value={value}>{label as string}</option>
+                                        <option 
+                                            key={value} 
+                                            value={value} 
+                                            title={options.narrativeStructureDescriptions?.[value] || ''}
+                                        >
+                                            {label as string}
+                                        </option>
                                     ))}
                                 </select>
                             </div>
                         </div>
+                        
+                        {/* Narrative Structure Description */}
+                        {currentStructureDescription && (
+                            <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-md p-3 mt-2 animate-fade-in">
+                                <p className="text-sm text-indigo-200 italic">
+                                    <span className="font-bold not-italic mr-1">ℹ️</span>
+                                    {currentStructureDescription}
+                                </p>
+                            </div>
+                        )}
+                        
+                        {/* Sub-options UI */}
+                        {currentSubOptions && (
+                            <div className="bg-gray-800/30 border border-gray-700 rounded-md p-4 mt-4 animate-fade-in">
+                                <label className="block text-sm font-medium text-indigo-300 mb-3">
+                                    {t('structureElements')} ({selectedSubElements.length} selected):
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                    {currentSubOptions.map((option) => (
+                                        <button
+                                            key={option}
+                                            onClick={() => toggleSubElement(option)}
+                                            className={`px-3 py-1.5 text-xs rounded-full border transition-colors text-left ${
+                                                selectedSubElements.includes(option)
+                                                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                                                    : 'bg-gray-700/50 border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500'
+                                            }`}
+                                        >
+                                            {option}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <button
                         onClick={handlePreGenerate}

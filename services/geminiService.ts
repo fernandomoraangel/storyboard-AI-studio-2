@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Chat, GenerateContentResponse, Type, FunctionDeclaration, Part, FunctionCall, Modality } from "@google/genai";
 import type { Character, Scene, Reference, Shot, StoryboardStyle, ArcPoint, ProjectState } from '../types';
 import type { Language } from "../lib/translations";
@@ -444,14 +445,19 @@ export const generateStory = async (
     subplotCount: number | '',
     episodeCount: number,
     setProgress: (messageKey: string, data?: { [key: string]: string | number }) => void,
-    executionPlan?: string[]
+    executionPlan?: string[],
+    structureSubElements?: string[] // New parameter for user-selected structural elements
 ): Promise<{ title: string; logline: string; soundtrackPrompt: string; treatment: string; structuralAnalysis: string; references: Reference[]; characters: Omit<Character, 'id' | 'images'>[]; episodes: { title: string, synopsis: string, scenes: Omit<Scene, 'id'>[] }[]; subplots: string; narrativeArc: ArcPoint[] }> => {
-    // ... (Same implementation as before)
     const langInstruction = language === 'es' ? 'en español' : 'in English';
     const userPrompt = prompt.trim() === '' ? (language === 'es' ? 'una serie sorprendente y visualmente interesante' : 'a surprising and visually interesting series') : prompt;
     const hasSubplots = typeof subplotCount === 'number' && subplotCount > 0;
     const numCharacters = (typeof characterCount === 'number' && characterCount >= 0) ? characterCount : Math.floor(Math.random() * 3) + 1;
-    const structureInstruction = translations[language].options.narrativeStructureOptions[narrativeStructure] || 'a clear narrative arc';
+    const structureName = translations[language].options.narrativeStructureOptions[narrativeStructure] || narrativeStructure;
+    
+    let structureInstruction = `Narrative Structure: ${structureName}.`;
+    if (structureSubElements && structureSubElements.length > 0) {
+        structureInstruction += ` Specifically incorporate the following structural elements/functions: ${structureSubElements.join(', ')}.`;
+    }
 
     let context = {
         coreConcept: { title: 'Untitled', logline: '', treatment: '' },
@@ -472,7 +478,7 @@ export const generateStory = async (
         'progressGeneratingCore': async () => {
             const coreConceptResponse = await generateContentWithRetry({
                 model: 'gemini-3-pro-preview',
-                contents: `Create a concept for a ${episodeCount > 1 ? 'Series' : 'Story'} based on: "${userPrompt}". Task: Invent a unique title, a compelling one-sentence logline, and a brief treatment (narrative summary). Response in ${langInstruction}.`,
+                contents: `Create a concept for a ${episodeCount > 1 ? 'Series' : 'Story'} based on: "${userPrompt}". ${structureInstruction} Task: Invent a unique title, a compelling one-sentence logline, and a brief treatment (narrative summary) that reflects this structure. Response in ${langInstruction}.`,
                 config: {
                     responseMimeType: 'application/json',
                     responseSchema: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, logline: { type: Type.STRING }, treatment: { type: Type.STRING } }, required: ['title', 'logline', 'treatment'] }
@@ -607,7 +613,7 @@ export const generateStory = async (
             }
             const episodesResponse = await generateContentWithRetry({
                 model: 'gemini-3-pro-preview',
-                contents: `Create an outline for a ${episodeCount}-episode series based on: "${context.refinedOutline.logline}" and treatment "${context.refinedOutline.treatment}". Provide a title and synopsis for each episode. Return JSON in ${langInstruction}.`,
+                contents: `Create an outline for a ${episodeCount}-episode series based on: "${context.refinedOutline.logline}" and treatment "${context.refinedOutline.treatment}". ${structureInstruction} Provide a title and synopsis for each episode. Return JSON in ${langInstruction}.`,
                 config: {
                     responseMimeType: 'application/json',
                     responseSchema: { type: Type.OBJECT, properties: { episodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, synopsis: { type: Type.STRING } }, required: ["title", "synopsis"] } } }, required: ["episodes"] }
@@ -619,7 +625,7 @@ export const generateStory = async (
             if (!context.episodeOutlines || context.episodeOutlines.length === 0) return;
             context.fullEpisodes = [];
             for (const [index, ep] of context.episodeOutlines.entries()) {
-                const promptContent = `Outline exactly ${sceneCount} scenes for Episode ${index + 1}: "${ep.title}" (Synopsis: ${ep.synopsis}). Narrative Structure: '${structureInstruction}'. Characters: ${context.characters.map(c => c.name).join(', ')}. Return JSON in ${langInstruction}.`;
+                const promptContent = `Outline exactly ${sceneCount} scenes for Episode ${index + 1}: "${ep.title}" (Synopsis: ${ep.synopsis}). ${structureInstruction} Characters: ${context.characters.map(c => c.name).join(', ')}. Return JSON in ${langInstruction}.`;
                 const schemaConfig = {
                     responseMimeType: 'application/json',
                     responseSchema: { type: Type.OBJECT, properties: { scenes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, location: { type: Type.STRING }, characters: { type: Type.STRING }, setting: { type: Type.STRING }, dialogueType: { type: Type.STRING, enum: ['dialogue', 'mos'] }, dialogue: { type: Type.STRING }, musicPrompt: { type: Type.STRING }, keyObjects: { type: Type.STRING }, actions: { type: Type.STRING }, tone: { type: Type.STRING }, notes: { type: Type.STRING } }, required: ["title", "location", "characters", "setting", "dialogueType", "dialogue", "musicPrompt", "keyObjects", "actions", "tone", "notes"] } } }, required: ["scenes"] }
@@ -687,7 +693,7 @@ export const generateStory = async (
              if (!context.refinedOutline.logline) return;
             const finalAnalysisResponse = await generateContentWithRetry({
                 model: 'gemini-3-pro-preview',
-                contents: `Analyze story structure for "${context.refinedOutline.logline}". Create soundtrack prompt and subplots. Return JSON in ${langInstruction}.`,
+                contents: `Analyze story structure for "${context.refinedOutline.logline}". ${structureInstruction} Create soundtrack prompt and subplots. Return JSON in ${langInstruction}.`,
                 config: {
                     responseMimeType: 'application/json',
                     responseSchema: { type: Type.OBJECT, properties: { structuralAnalysis: { type: Type.STRING }, soundtrackPrompt: { type: Type.STRING }, subplots: { type: Type.STRING } }, required: ["structuralAnalysis", "soundtrackPrompt", ...(hasSubplots ? ["subplots"] : [])] }

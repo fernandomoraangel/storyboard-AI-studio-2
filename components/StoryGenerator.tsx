@@ -1,12 +1,17 @@
 
 
 
+
+
+
+
 import React, { useState, useRef, useEffect } from 'react';
 import type { Scene, Character, Reference, ArcPoint, Episode } from '../types';
-import { generateStory } from '../services/geminiService';
+import { generateStory, generateQuickText } from '../services/geminiService';
 import { WandIcon, GripVerticalIcon } from './icons';
 import { useLanguage } from '../contexts/languageContext';
 import { StoryGenerationProgress } from './StoryGenerationProgress';
+import { LoadingSpinner } from './LoadingSpinner';
 
 type EpisodePreview = {
     title: string;
@@ -48,6 +53,9 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
     const [subplotCount, setSubplotCount] = useState<number | ''>('');
     const [narrativeStructure, setNarrativeStructure] = useState('');
     const [selectedSubElements, setSelectedSubElements] = useState<string[]>([]);
+    const [structureCustomInput, setStructureCustomInput] = useState('');
+    const [isGeneratingPremise, setIsGeneratingPremise] = useState(false);
+    
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [preview, setPreview] = useState<StoryPreview | null>(null);
@@ -78,6 +86,7 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
     const handleNarrativeStructureChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setNarrativeStructure(e.target.value);
         setSelectedSubElements([]); // Reset sub elements when structure changes
+        setStructureCustomInput(''); // Reset custom input
     };
 
     const toggleSubElement = (element: string) => {
@@ -88,6 +97,27 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
                 return [...prev, element];
             }
         });
+    };
+
+    const handleSuggestPremise = async () => {
+        setIsGeneratingPremise(true);
+        setError(null);
+        try {
+            let promptText = '';
+            if (prompt.trim()) {
+                promptText = `Create a Lajos Egri style premise (Character + Conflict = Conclusion) based on this story idea: "${prompt}". Keep it concise, one sentence. Response in ${language === 'es' ? 'Spanish' : 'English'}.`;
+            } else {
+                promptText = `Create a random, compelling Lajos Egri style premise (Character + Conflict = Conclusion) for a new story. Keep it concise, one sentence. Response in ${language === 'es' ? 'Spanish' : 'English'}.`;
+            }
+            
+            const premise = await generateQuickText(promptText, language);
+            setStructureCustomInput(premise);
+        } catch (e) {
+            console.error("Failed to generate premise", e);
+            setError(t('storyGenerationError', { message: (e as Error).message }));
+        } finally {
+            setIsGeneratingPremise(false);
+        }
     };
 
     const handleSceneCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -294,7 +324,8 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
                 finalEpisodeCount,
                 setProgress,
                 finalPlan,
-                selectedSubElements // Pass selected sub-elements
+                selectedSubElements, // Pass selected sub-elements (arrays)
+                structureCustomInput // Pass custom input (string) for Egri/others
             );
             setPreview(result);
             setShowProgressModal(false);
@@ -565,13 +596,41 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
                             </div>
                         )}
                         
-                        {/* Sub-options UI */}
+                        {/* Specific UI for Lajos Egri Premise */}
+                        {narrativeStructure === 'egriPremise' && (
+                            <div className="bg-gray-800/30 border border-gray-700 rounded-md p-4 mt-4 animate-fade-in">
+                                <label htmlFor="egri-premise" className="block text-sm font-medium text-indigo-300 mb-2">
+                                    {t('egriPremiseLabel')}
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        id="egri-premise"
+                                        type="text"
+                                        value={structureCustomInput}
+                                        onChange={(e) => setStructureCustomInput(e.target.value)}
+                                        placeholder={t('egriPremisePlaceholder')}
+                                        className="flex-1 block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6"
+                                    />
+                                    <button 
+                                        onClick={handleSuggestPremise}
+                                        disabled={isGeneratingPremise}
+                                        className="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50"
+                                        title={prompt ? t('suggestPremise') : "Generate random premise"}
+                                    >
+                                        {isGeneratingPremise ? <LoadingSpinner /> : <WandIcon className="w-4 h-4 mr-1" />}
+                                        {t('suggestPremise')}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Sub-options UI (Checkboxes for lists) */}
                         {currentSubOptions && (
                             <div className="bg-gray-800/30 border border-gray-700 rounded-md p-4 mt-4 animate-fade-in">
                                 <label className="block text-sm font-medium text-indigo-300 mb-3">
                                     {t('structureElements')} ({selectedSubElements.length} selected):
                                 </label>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto">
                                     {currentSubOptions.map((option) => (
                                         <button
                                             key={option}

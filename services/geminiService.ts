@@ -1,5 +1,7 @@
 
 
+
+
 import { GoogleGenAI, Chat, GenerateContentResponse, Type, FunctionDeclaration, Part, FunctionCall, Modality } from "@google/genai";
 import type { Character, Scene, Reference, Shot, StoryboardStyle, ArcPoint, ProjectState } from '../types';
 import type { Language } from "../lib/translations";
@@ -435,6 +437,14 @@ export const updateStoryFromArc = async (
     return JSON.parse(cleanJson(response.text.trim()));
 };
 
+export const generateQuickText = async (prompt: string, language: Language): Promise<string> => {
+    const response = await generateContentWithRetry({
+        model: 'gemini-2.5-flash',
+        contents: prompt
+    });
+    return response.text || '';
+};
+
 export const generateStory = async (
     prompt: string, 
     sceneCount: number, 
@@ -446,7 +456,8 @@ export const generateStory = async (
     episodeCount: number,
     setProgress: (messageKey: string, data?: { [key: string]: string | number }) => void,
     executionPlan?: string[],
-    structureSubElements?: string[] // New parameter for user-selected structural elements
+    structureSubElements?: string[], // New parameter for user-selected structural elements
+    structureCustomInput?: string // New parameter for text inputs like Egri's premise
 ): Promise<{ title: string; logline: string; soundtrackPrompt: string; treatment: string; structuralAnalysis: string; references: Reference[]; characters: Omit<Character, 'id' | 'images'>[]; episodes: { title: string, synopsis: string, scenes: Omit<Scene, 'id'>[] }[]; subplots: string; narrativeArc: ArcPoint[] }> => {
     const langInstruction = language === 'es' ? 'en español' : 'in English';
     const userPrompt = prompt.trim() === '' ? (language === 'es' ? 'una serie sorprendente y visualmente interesante' : 'a surprising and visually interesting series') : prompt;
@@ -457,6 +468,9 @@ export const generateStory = async (
     let structureInstruction = `Narrative Structure: ${structureName}.`;
     if (structureSubElements && structureSubElements.length > 0) {
         structureInstruction += ` Specifically incorporate the following structural elements/functions: ${structureSubElements.join(', ')}.`;
+    }
+    if (structureCustomInput) {
+        structureInstruction += ` Specific Structural Directive (e.g. Premise/Theme): "${structureCustomInput}".`;
     }
 
     let context = {

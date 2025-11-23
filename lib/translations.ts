@@ -162,6 +162,11 @@ export const translations: Record<Language, Translations> = {
     approveAndCreate: "Approve & Create Story",
     discard: "Discard",
     
+    // Specific Structure Inputs
+    egriPremiseLabel: "Lajos Egri's Premise",
+    egriPremisePlaceholder: "e.g., 'Greed leads to self-destruction'",
+    suggestPremise: "Suggest Premise with AI",
+    
     confirmMassGenerationTitle: "Generate All Images?",
     confirmMassGenerationMessage: "Do you want to generate all {count} images for the characters and shots now? This may take some time and consume API quota.",
     confirmMassGenerationYes: "Yes, Generate All",
@@ -575,7 +580,8 @@ export const translations: Record<Language, Translations> = {
             circular: 'Circular Structure',
             collage: 'Collage Narrative',
             frameNarrative: 'Frame Narrative (Caja China)',
-            fragmented: 'Fragmented Narrative'
+            fragmented: 'Fragmented Narrative',
+            poltiSituations: 'Polti\'s 36 Dramatic Situations'
         },
         narrativeStructureDescriptions: {
             threeAct: 'The classic structure dividing the story into Setup, Confrontation, and Resolution. Ideal for most mainstream films and stories, ensuring a balanced pace and clear conflict resolution.',
@@ -593,7 +599,8 @@ export const translations: Record<Language, Translations> = {
             circular: 'The story ends where it began, often suggesting a cycle of events or lack of change. Good for themes of fate, futility, or eternal return.',
             collage: 'A collection of disparate scenes, styles, or perspectives that form a cohesive whole. Best for experimental narratives or exploring a theme from multiple angles.',
             frameNarrative: 'A story within a story (Caja China). A main narrative sets the stage for a second (or more) inner story. Adds depth and context to the core tale.',
-            fragmented: 'Non-linear storytelling where the plot is broken into pieces that the audience must assemble. Ideal for mysteries, psychological dramas, or exploring memory.'
+            fragmented: 'Non-linear storytelling where the plot is broken into pieces that the audience must assemble. Ideal for mysteries, psychological dramas, or exploring memory.',
+            poltiSituations: 'Georges Polti defined 36 basic dramatic situations (e.g., Supplication, Deliverance, Crime Pursued by Vengeance). Choosing one or more helps define the core conflict engine of your story.'
         },
         structureSubOptions: {
             proppsFunctions: [
@@ -651,6 +658,49 @@ export const translations: Record<Language, Translations> = {
                 'The Ambition (Macbeth)',
                 'The Pact with the Devil (Faust)',
                 'The Double (Jekyll and Hyde)'
+            ],
+            sevenPoint: [
+                'The Hook (Starting state)',
+                'Plot Turn 1 (Call to action)',
+                'Pinch 1 (Pressure is applied)',
+                'Midpoint (Shift from reaction to action)',
+                'Pinch 2 (Pressure intensifies, hope is lost)',
+                'Plot Turn 2 (The final piece of the puzzle)',
+                'Resolution (The climax and new state)'
+            ],
+            campbellArchetypes: [
+                'The Hero',
+                'The Mentor',
+                'The Threshold Guardian',
+                'The Herald',
+                'The Shapeshifter',
+                'The Shadow',
+                'The Ally',
+                'The Trickster'
+            ],
+            poltiSituations: [
+                'Supplication', 'Deliverance', 'Crime Pursued by Vengeance', 'Vengeance Taken for Kindred upon Kindred',
+                'Pursuit', 'Disaster', 'Falling Prey to Cruelty or Misfortune', 'Revolt', 'Daring Enterprise',
+                'Abduction', 'The Enigma', 'Obtaining', 'Enmity of Kinsmen', 'Rivalry of Kinsmen',
+                'Murderous Adultery', 'Madness', 'Fatal Imprudence', 'Involuntary Crimes of Love',
+                'Slaying of a Kinsman Unrecognized', 'Self-Sacrifice for an Ideal', 'Self-Sacrifice for Kindred',
+                'All Sacrificed for a Passion', 'Necessity of Sacrificing Loved Ones', 'Rivalry of Superior and Inferior',
+                'Adultery', 'Crimes of Love', 'Discovery of the Dishonor of a Loved One', 'Obstacles to Love',
+                'An Enemy Loved', 'Ambition', 'Conflict with a God', 'Mistaken Jealousy', 'Erroneous Judgment',
+                'Remorse', 'Recovery of a Lost One', 'Loss of Loved Ones'
+            ],
+            mckeeValues: [
+                'Life / Death',
+                'Love / Hate',
+                'Truth / Lie',
+                'Justice / Injustice',
+                'Freedom / Slavery',
+                'Hope / Despair',
+                'Connection / Alienation',
+                'Good / Evil',
+                'Strength / Weakness',
+                'Loyalty / Betrayal',
+                'Success / Failure'
             ]
         },
         transitionTypeOptions: [
@@ -824,6 +874,11 @@ export const translations: Record<Language, Translations> = {
     scenes: "Escenas",
     approveAndCreate: "Aprobar y Crear Historia",
     discard: "Descartar",
+    
+    // Specific Structure Inputs
+    egriPremiseLabel: "Premisa de Lajos Egri",
+    egriPremisePlaceholder: "ej., 'La avaricia lleva a la autodestrucción'",
+    suggestPremise: "Sugerir Premisa con IA",
 
     confirmMassGenerationTitle: "¿Generar Todas las Imágenes?",
     confirmMassGenerationMessage: "¿Quieres generar las {count} imágenes para los personajes y planos ahora? Esto puede tomar tiempo y consumir cuota de API.",
@@ -1238,7 +1293,8 @@ export const translations: Record<Language, Translations> = {
             circular: 'Estructura Circular',
             collage: 'Narrativa Collage',
             frameNarrative: 'Narrativa Enmarcada (Caja China)',
-            fragmented: 'Narrativa Fragmentada'
+            fragmented: 'Narrativa Fragmentada',
+            poltiSituations: '36 Situaciones Dramáticas de Polti'
         },
         narrativeStructureDescriptions: {
             threeAct: 'La estructura clásica que divide la historia en Planteamiento, Nudo y Desenlace. Ideal para la mayoría de películas e historias convencionales, asegurando un ritmo equilibrado y una resolución clara.',
@@ -1256,7 +1312,8 @@ export const translations: Record<Language, Translations> = {
             circular: 'La historia termina donde comenzó, a menudo sugiriendo un ciclo de eventos o falta de cambio. Bueno para temas de destino, futilidad o eterno retorno.',
             collage: 'Una colección de escenas, estilos o perspectivas dispares que forman un todo cohesivo. Mejor para narrativas experimentales o explorar un tema desde múltiples ángulos.',
             frameNarrative: 'Una historia dentro de una historia (Caja China). Una narrativa principal prepara el escenario para una segunda (o más) historia interna. Añade profundidad y contexto.',
-            fragmented: 'Narración no lineal donde la trama se rompe en pedazos que la audiencia debe ensamblar. Ideal para misterios, dramas psicológicos o explorar la memoria.'
+            fragmented: 'Narración no lineal donde la trama se rompe en pedazos que la audiencia debe ensamblar. Ideal para misterios, dramas psicológicos o explorar la memoria.',
+            poltiSituations: 'Georges Polti definió 36 situaciones dramáticas básicas (ej. Súplica, Liberación, Venganza de un crimen). Elegir una o varias ayuda a definir el motor de conflicto de tu historia.'
         },
         structureSubOptions: {
             proppsFunctions: [
@@ -1314,6 +1371,49 @@ export const translations: Record<Language, Translations> = {
                 'La Ambición (Macbeth)',
                 'El Pacto con el Diablo (Fausto)',
                 'El Doble (Jekyll y Hyde)'
+            ],
+            sevenPoint: [
+                'El Gancho (Estado inicial)',
+                'Giro de Trama 1 (Llamada a la acción)',
+                'Pinzamiento 1 (Se aplica presión)',
+                'Punto Medio (Cambio de reacción a acción)',
+                'Pinzamiento 2 (La presión se intensifica, se pierde la esperanza)',
+                'Giro de Trama 2 (La pieza final del rompecabezas)',
+                'Resolución (El clímax y nuevo estado)'
+            ],
+            campbellArchetypes: [
+                'El Héroe',
+                'El Mentor',
+                'El Guardián del Umbral',
+                'El Heraldo',
+                'El Cambiante (Shapeshifter)',
+                'La Sombra',
+                'El Aliado',
+                'El Embaucador (Trickster)'
+            ],
+            poltiSituations: [
+                'Súplica', 'Liberación', 'Crimen perseguido por venganza', 'Venganza de parientes sobre parientes',
+                'Persecución', 'Desastre', 'Caer presa de la crueldad o la desgracia', 'Revuelta', 'Empresa audaz',
+                'Secuestro', 'El Enigma', 'Obtención', 'Enemistad de parientes', 'Rivalidad de parientes',
+                'Adulterio asesino', 'Locura', 'Imprudencia fatal', 'Crímenes involuntarios de amor',
+                'Asesinato de un pariente no reconocido', 'Auto-sacrificio por un ideal', 'Auto-sacrificio por parientes',
+                'Todo sacrificado por una pasión', 'Necesidad de sacrificar seres queridos', 'Rivalidad de superior e inferior',
+                'Adulterio', 'Crímenes de amor', 'Descubrimiento de la deshonra de un ser querido', 'Obstáculos al amor',
+                'Un enemigo amado', 'Ambición', 'Conflicto con un dios', 'Celos equivocados', 'Juicio erróneo',
+                'Remordimiento', 'Recuperación de un ser perdido', 'Pérdida de seres queridos'
+            ],
+            mckeeValues: [
+                'Vida / Muerte',
+                'Amor / Odio',
+                'Verdad / Mentira',
+                'Justicia / Injusticia',
+                'Libertad / Esclavitud',
+                'Esperanza / Desesperación',
+                'Conexión / Alienación',
+                'Bien / Mal',
+                'Fuerza / Debilidad',
+                'Lealtad / Traición',
+                'Éxito / Fracaso'
             ]
         },
         transitionTypeOptions: [

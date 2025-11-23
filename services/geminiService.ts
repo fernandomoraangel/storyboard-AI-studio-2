@@ -2,6 +2,8 @@
 
 
 
+
+
 import { GoogleGenAI, Chat, GenerateContentResponse, Type, FunctionDeclaration, Part, FunctionCall, Modality } from "@google/genai";
 import type { Character, Scene, Reference, Shot, StoryboardStyle, ArcPoint, ProjectState } from '../types';
 import type { Language } from "../lib/translations";
@@ -41,6 +43,25 @@ const createQuotaPlaceholderImage = (text: string = "Quota Exceeded"): string =>
         ctx.fillText("Try again later", canvas.width / 2, canvas.height / 2 + 50);
     }
     return canvas.toDataURL('image/jpeg');
+};
+
+const incrementDailyImageCount = () => {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const storedDate = localStorage.getItem('dailyImageDate');
+        let count = parseInt(localStorage.getItem('dailyImageCount') || '0', 10);
+
+        if (storedDate !== today) {
+            count = 0;
+            localStorage.setItem('dailyImageDate', today);
+        }
+        localStorage.setItem('dailyImageCount', (count + 1).toString());
+        
+        // Dispatch a custom event so UI components can react immediately
+        window.dispatchEvent(new Event('imageGenerated'));
+    } catch (e) {
+        console.error("Failed to update image count", e);
+    }
 };
 
 const generateContentWithRetry = async (params: any): Promise<GenerateContentResponse> => {
@@ -286,6 +307,7 @@ export const generateImage = async (prompt: string, aspectRatio: '1:1' | '3:4' |
             }
             for (const part of response.candidates[0].content.parts) {
                 if (part.inlineData && part.inlineData.data) {
+                    incrementDailyImageCount(); // Track usage
                     return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
                 }
             }

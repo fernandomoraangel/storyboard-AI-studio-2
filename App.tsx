@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Storyboard } from './components/Storyboard';
 import { ChatWidget } from './components/ChatWidget';
@@ -8,8 +10,9 @@ import { CharacterDesigner } from './components/CharacterDesigner';
 import { StoryGenerator } from './components/StoryGenerator';
 import { NarrativeArcEditor } from './components/NarrativeArcEditor';
 import { VisualOrganizer } from './components/VisualOrganizer';
+import { Utilities } from './components/Utilities';
 import type { Scene, Character, Reference, Shot, StoryboardStyle, ProjectMeta, CustomStyle, CustomStyleImage, Episode, ProjectState, ArcPoint } from './types';
-import { FilmIcon, PlusIcon, DownloadIcon, UserIcon, BookOpenIcon, TrashIcon, FloppyDiskIcon, FolderOpenIcon, ShareIcon, WandIcon, VideoIcon, CheckCircleIcon, RowsIcon, ActivityIcon, LayoutGridIcon } from './components/icons';
+import { FilmIcon, PlusIcon, DownloadIcon, UserIcon, BookOpenIcon, TrashIcon, FloppyDiskIcon, FolderOpenIcon, ShareIcon, WandIcon, VideoIcon, CheckCircleIcon, RowsIcon, ActivityIcon, LayoutGridIcon, ChartBarIcon } from './components/icons';
 import { createImagePromptForShot, generateImage, generateSynopsis, createCharacterImagePrompt, ensureStoryConsistency, modifyStory } from './services/geminiService';
 import { exportStoryboardToPDF } from './services/pdfService';
 import { translations, Language } from './lib/translations';
@@ -25,7 +28,7 @@ import { LanguageContext } from './contexts/languageContext';
 import { VideoGenerator } from './components/VideoGenerator';
 import { PDFExportModal, PDFExportOptions } from './components/PDFExportModal';
 
-type WorkflowPhase = 'bible' | 'arc' | 'organizer' | 'episodes' | 'storyboard' | 'generator' | 'export';
+type WorkflowPhase = 'bible' | 'arc' | 'organizer' | 'episodes' | 'storyboard' | 'generator' | 'export' | 'utilities';
 
 type GenerationJob = {
     type: 'character' | 'shot';
@@ -600,6 +603,9 @@ export const App: React.FC = () => {
                 <WandIcon className="w-5 h-5" /> AI Generator
             </button>
             <div className="my-4 border-t border-gray-700"></div>
+            <button onClick={() => setWorkflowPhase('utilities')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'utilities' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
+                <ChartBarIcon className="w-5 h-5" /> Utilities
+            </button>
             <button onClick={() => {
                 if (activeEpisodeId === null && episodes.length > 0) setActiveEpisodeId(episodes[0].id);
                 setWorkflowPhase('export');
@@ -775,6 +781,17 @@ export const App: React.FC = () => {
                 <div className="max-w-4xl mx-auto">
                     <StoryGenerator onStoryGenerated={handleStoryGenerated} aspectRatio={aspectRatio} />
                 </div>
+            )}
+
+            {workflowPhase === 'utilities' && (
+                <Utilities 
+                    episodes={episodes} 
+                    characters={characters}
+                    setEpisodes={setEpisodes}
+                    setCharacters={setCharacters}
+                    storyboardStyle={storyboardStyle}
+                    aspectRatio={aspectRatio}
+                />
             )}
 
             {workflowPhase === 'export' && (

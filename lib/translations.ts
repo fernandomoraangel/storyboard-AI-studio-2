@@ -1,5 +1,7 @@
 
 
+
+
 export type Language = 'en' | 'es';
 
 export type Options = {
@@ -189,6 +191,21 @@ export const translations: Record<Language, Translations> = {
     undoReorganization: "Undo Changes",
     noEpisodes: "No episodes available.",
 
+    // Utilities & Metrics
+    utilitiesTitle: "Utilities & Metrics",
+    metricsDescription: "Monitor your project usage and perform bulk actions.",
+    projectStats: "Project Statistics",
+    tokenUsage: "Estimated Token Usage",
+    contextWindow: "Context Window (1M Tokens)",
+    imagesGeneratedToday: "Images Generated (Today)",
+    regenerateAllImages: "Regenerate All Images",
+    regenerateAllDescription: "This will re-generate visuals for EVERY character and EVERY shot in your project. This process is intensive.",
+    startRegeneration: "Start Regeneration",
+    regenerationProgress: "Regenerating...",
+    stopRegeneration: "Stop",
+    totalWords: "Total Words",
+    approxTokens: "Approx. Tokens",
+    
     // Frame.io
     frameIOTokenSetup: "Frame.io Setup",
     setupInstructions_token_1: "To export to Frame.io, you need a Developer Token.",
@@ -902,6 +919,21 @@ export const translations: Record<Language, Translations> = {
     undoReorganization: "Deshacer Cambios",
     noEpisodes: "No hay episodios disponibles.",
 
+    // Utilities & Metrics
+    utilitiesTitle: "Utilidades y Métricas",
+    metricsDescription: "Monitorea el uso de tu proyecto y realiza acciones masivas.",
+    projectStats: "Estadísticas del Proyecto",
+    tokenUsage: "Uso Estimado de Tokens",
+    contextWindow: "Ventana de Contexto (1M Tokens)",
+    imagesGeneratedToday: "Imágenes Generadas (Hoy)",
+    regenerateAllImages: "Regenerar Todas las Imágenes",
+    regenerateAllDescription: "Esto regenerará los visuales para CADA personaje y CADA plano en tu proyecto. Este proceso es intensivo.",
+    startRegeneration: "Iniciar Regeneración",
+    regenerationProgress: "Regenerando...",
+    stopRegeneration: "Detener",
+    totalWords: "Palabras Totales",
+    approxTokens: "Tokens Aprox.",
+
     // Frame.io
     frameIOTokenSetup: "Configuración de Frame.io",
     setupInstructions_token_1: "Para exportar a Frame.io, necesitas un Token de Desarrollador.",
@@ -1393,13 +1425,13 @@ export const translations: Record<Language, Translations> = {
             ],
             poltiSituations: [
                 'Súplica', 'Liberación', 'Crimen perseguido por venganza', 'Venganza de parientes sobre parientes',
-                'Persecución', 'Desastre', 'Caer presa de la crueldad o la desgracia', 'Revuelta', 'Empresa audaz',
+                'Persecución', 'Desastre', 'Caer presa de la crueldad o la desgracia', 'Revolt', 'Empresa audaz',
                 'Secuestro', 'El Enigma', 'Obtención', 'Enemistad de parientes', 'Rivalidad de parientes',
                 'Adulterio asesino', 'Locura', 'Imprudencia fatal', 'Crímenes involuntarios de amor',
                 'Asesinato de un pariente no reconocido', 'Auto-sacrificio por un ideal', 'Auto-sacrificio por parientes',
                 'Todo sacrificado por una pasión', 'Necesidad de sacrificar seres queridos', 'Rivalidad de superior e inferior',
                 'Adulterio', 'Crímenes de amor', 'Descubrimiento de la deshonra de un ser querido', 'Obstáculos al amor',
-                'Un enemigo amado', 'Ambición', 'Conflicto con un dios', 'Celos equivocados', 'Juicio erróneo',
+                'Un enemigo amado', 'Ambition', 'Conflicto con un dios', 'Celos equivocados', 'Juicio erróneo',
                 'Remordimiento', 'Recuperación de un ser perdido', 'Pérdida de seres queridos'
             ],
             mckeeValues: [

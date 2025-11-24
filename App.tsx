@@ -20,6 +20,7 @@ import { AnimaticExportModal } from './components/AnimaticExportModal';
 import { ModificationModal } from './components/ModificationModal';
 import { ConsistencyModal } from './components/ConsistencyModal';
 import { ModificationPreviewModal } from './components/ModificationPreviewModal';
+import { LoadingSpinner } from './components/LoadingSpinner';
 import { 
     LayoutGridIcon, FilmIcon, UserIcon, BookOpenIcon, VideoIcon, ChartBarIcon, 
     ActivityIcon, FloppyDiskIcon, FolderOpenIcon, TrashIcon, PlusIcon, 
@@ -35,7 +36,8 @@ export const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('en');
 
   const t = useCallback((key: keyof typeof translations.en, replacements?: { [key: string]: string | number }) => {
-    let text = translations[language][key] || translations['en'][key] || key;
+    const val = translations[language][key] || translations['en'][key];
+    let text = typeof val === 'string' ? val : key; // Fallback to key if not a string
     if (replacements) {
         Object.entries(replacements).forEach(([k, v]) => {
             text = text.replace(`{${k}}`, String(v));
@@ -73,6 +75,9 @@ export const App: React.FC = () => {
   const [workflowPhase, setWorkflowPhase] = useState('generator'); // Default start
   const [bibleTab, setBibleTab] = useState<'general' | 'characters' | 'style'>('general');
 
+  // UI Reset Key - Incremented to force remounting of components with local state (like StoryGenerator inputs)
+  const [resetKey, setResetKey] = useState(0);
+
   // Custom Styles
   const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
 
@@ -85,6 +90,10 @@ export const App: React.FC = () => {
   const [modificationPreviewData, setModificationPreviewData] = useState<{explanation: string, state: ProjectState} | null>(null);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   
+  // Confirmation Modals
+  const [showNewProjectConfirmation, setShowNewProjectConfirmation] = useState(false);
+  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
+  
   // Mass Generation State
   const [showGenerationOffer, setShowGenerationOffer] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -96,7 +105,8 @@ export const App: React.FC = () => {
 
   // Project Management
   const [projectsList, setProjectsList] = useState<{id: number, name: string, modified: Date}[]>([]);
-  const [showProjectList, setShowProjectList] = useState(false);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [showLoadProjectModal, setShowLoadProjectModal] = useState(false);
 
   // Initial Load
   useEffect(() => {
@@ -105,13 +115,24 @@ export const App: React.FC = () => {
   }, []);
 
   const loadProjectsList = async () => {
-      const list = await getProjectsList();
-      setProjectsList(list);
+      setIsLoadingProjects(true);
+      try {
+          const list = await getProjectsList();
+          setProjectsList(list);
+      } catch (e) {
+          console.error("Failed to load projects list:", e);
+      } finally {
+          setIsLoadingProjects(false);
+      }
   };
 
   const loadCustomStyles = async () => {
-      const styles = await getCustomStyles();
-      setCustomStyles(styles);
+      try {
+          const styles = await getCustomStyles();
+          setCustomStyles(styles);
+      } catch (e) {
+          console.error("Failed to load custom styles:", e);
+      }
   };
 
   const gatherState = (): ProjectState => ({
@@ -151,49 +172,101 @@ export const App: React.FC = () => {
       } else {
           setActiveEpisodeId(null);
       }
+      
+      // Force UI refresh
+      setResetKey(prev => prev + 1);
   };
 
-  const handleSaveProject = async () => {
-      const state = gatherState();
-      const id = await saveProject({
-          id: currentProjectId,
-          name: seriesTitle,
-          state
-      });
-      setCurrentProjectId(id);
-      loadProjectsList();
-      alert(t('projectSaved'));
+  // --- Project Actions ---
+
+  const handleSaveProjectClick = () => {
+      setShowSaveConfirmation(true);
   };
 
-  const handleLoadProject = async (id: number) => {
-      const project = await getProject(id);
-      if (project) {
-          setCurrentProjectId(project.id);
-          applyState(project.state);
-          setShowProjectList(false);
+  const confirmSaveProject = async (saveAsNew: boolean) => {
+      try {
+          setShowSaveConfirmation(false);
+          const state = gatherState();
+          
+          const projectId = saveAsNew ? undefined : currentProjectId;
+          
+          const id = await saveProject({
+              id: projectId,
+              name: seriesTitle,
+              state
+          });
+          setCurrentProjectId(id);
+          await loadProjectsList();
+          alert(t('projectSaved'));
+      } catch (e) {
+          console.error("Failed to save project:", e);
+          alert(t('errorGeneric', { message: 'Failed to save project. See console.' }));
       }
   };
 
-  const handleNewProject = () => {
-      if (window.confirm(t('unsavedChangesMessage'))) {
+  const handleLoadProject = async (id: number) => {
+      try {
+          const project = await getProject(id);
+          if (project) {
+              setCurrentProjectId(project.id);
+              applyState(project.state);
+              setShowLoadProjectModal(false);
+          } else {
+              alert("Project not found.");
+          }
+      } catch (e) {
+          console.error("Failed to load project:", e);
+          alert(t('errorGeneric', { message: 'Failed to load project.' }));
+      }
+  };
+
+  const handleNewProjectClick = () => {
+      setShowNewProjectConfirmation(true);
+  };
+
+  const confirmNewProject = () => {
+      try {
+          setShowNewProjectConfirmation(false);
           setCurrentProjectId(undefined);
-          setSeriesTitle('Untitled Project');
-          setEpisodes([]);
-          setCharacters([]);
+          
+          // Explicitly reset ALL state variables
+          setSeriesTitle(t('untitledProject'));
+          setAuthorName('');
+          setStoryboardStyle('Cinematic');
+          setAspectRatio('16:9');
           setLogline('');
           setTreatment('');
-          setNarrativeArc([]);
+          setStructuralAnalysis('');
+          setSubplots('');
+          setSoundtrackPrompt('');
           setReferences([]);
+          setNarrativeArc([]);
+          setCharacters([]);
+          setEpisodes([]);
+          
+          setActiveEpisodeId(null);
           setWorkflowPhase('generator');
+          setBibleTab('general');
+          
+          // Force component remounting
+          setResetKey(prev => prev + 1);
+      } catch (e) {
+          console.error("Error creating new project:", e);
+          alert(t('errorGeneric', { message: 'Failed to reset project.' }));
       }
   };
 
   const handleDeleteProject = async (id: number) => {
       if (window.confirm(t('confirmDeleteProject'))) {
-          await deleteProject(id);
-          loadProjectsList();
-          if (currentProjectId === id) {
-              handleNewProject();
+          try {
+              await deleteProject(id);
+              await loadProjectsList();
+              if (currentProjectId === id) {
+                  confirmNewProject(); // Reset interface if current project was deleted
+              }
+          } catch (e) {
+              console.error("Failed to delete project:", e);
+              alert("Failed to delete project.");
           }
       }
   };
@@ -309,7 +382,7 @@ export const App: React.FC = () => {
             {/* SIDEBAR */}
             <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-gray-800 border-r border-gray-700 flex flex-col flex-shrink-0 transition-all duration-300 z-30 relative`}>
                 {/* Header / Toggle */}
-                <div className="h-16 flex items-center px-4 border-b border-gray-700 justify-between">
+                <div className="h-16 flex items-center px-4 border-b border-gray-700 justify-between flex-shrink-0">
                     {!isSidebarCollapsed && (
                         <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400 truncate">
                             Storyboard AI
@@ -323,7 +396,7 @@ export const App: React.FC = () => {
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto overflow-x-visible py-4 flex flex-col gap-1">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden py-4 flex flex-col gap-1">
                     {/* Navigation */}
                     <nav className="px-3 space-y-1">
                         {menuItems.map(item => (
@@ -349,54 +422,28 @@ export const App: React.FC = () => {
                     <div className="px-3 space-y-1">
                         {!isSidebarCollapsed && <div className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 mt-2">{t('project')}</div>}
                         
-                        <button onClick={handleNewProject} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors`} title={t('newProject')}>
+                        <button onClick={handleNewProjectClick} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors`} title={t('newProject')}>
                             <PlusIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
                             {!isSidebarCollapsed && t('newProject')}
                         </button>
 
-                        <button onClick={handleSaveProject} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`} title={t('saveProject')}>
+                        <button onClick={handleSaveProjectClick} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`} title={t('saveProject')}>
                             <FloppyDiskIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
                             {!isSidebarCollapsed && t('saveProject')}
                         </button>
 
-                        {/* Load Project with Side Popout */}
-                        <div className="relative group">
-                            <button onClick={() => setShowProjectList(!showProjectList)} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`} title={t('loadProject')}>
-                                <FolderOpenIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
-                                {!isSidebarCollapsed && t('loadProject')}
-                            </button>
-                            
-                            {showProjectList && (
-                                <div className={`absolute ${isSidebarCollapsed ? 'left-full top-0 ml-2' : 'top-full left-0 mt-1 w-full'} w-64 bg-gray-800 border border-gray-700 rounded-md shadow-xl overflow-hidden z-50 animate-fade-in`}>
-                                    <div className="p-2 border-b border-gray-700 bg-gray-900/50 flex justify-between items-center">
-                                        <span className="text-xs font-bold uppercase text-gray-500 px-2">{t('loadProject')}</span>
-                                        <button onClick={() => setShowProjectList(false)} className="text-gray-500 hover:text-white p-1"><ChevronLeftIcon className="w-3 h-3"/></button>
-                                    </div>
-                                    <div className="max-h-64 overflow-y-auto">
-                                        {projectsList.map(p => (
-                                            <div key={p.id} className="flex items-center justify-between p-2 hover:bg-gray-700 group cursor-pointer border-b border-gray-700/50 last:border-0">
-                                                <button onClick={() => handleLoadProject(p.id)} className="flex-1 text-left text-sm text-gray-300 truncate px-1">
-                                                    {p.name}
-                                                    <span className="block text-[10px] text-gray-500">{new Date(p.modified).toLocaleDateString()}</span>
-                                                </button>
-                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-600 rounded opacity-0 group-hover:opacity-100 transition-all">
-                                                    <TrashIcon className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {projectsList.length === 0 && <div className="p-4 text-center text-xs text-gray-500">{t('noProjectsFoundError')}</div>}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <button onClick={() => { loadProjectsList(); setShowLoadProjectModal(true); }} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`} title={t('loadProject')}>
+                            <FolderOpenIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
+                            {!isSidebarCollapsed && t('loadProject')}
+                        </button>
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-gray-700">
+                <div className="p-4 border-t border-gray-700 flex-shrink-0">
                     <LanguageSelector collapsed={isSidebarCollapsed} />
                     {!isSidebarCollapsed && (
                         <div className="text-xs text-gray-500 text-center mt-4">
-                            v1.6.0 Studio Edition
+                            v1.6.5 Studio Edition
                         </div>
                     )}
                 </div>
@@ -427,6 +474,7 @@ export const App: React.FC = () => {
                     <div className="max-w-7xl mx-auto">
                         {workflowPhase === 'bible' && (
                             <SeriesBible 
+                                key={resetKey}
                                 logline={logline} setLogline={setLogline}
                                 treatment={treatment} setTreatment={setTreatment}
                                 subplots={subplots} setSubplots={setSubplots}
@@ -444,6 +492,7 @@ export const App: React.FC = () => {
 
                         {workflowPhase === 'arc' && (
                             <NarrativeArcEditor 
+                                key={resetKey}
                                 arc={narrativeArc} setArc={setNarrativeArc}
                                 currentLogline={logline} currentTreatment={treatment} currentEpisodes={episodes}
                                 onStoryUpdated={(l, t, e) => { setLogline(l); setTreatment(t); /* Logic to merge episodes needed if complex */ }}
@@ -452,6 +501,7 @@ export const App: React.FC = () => {
 
                         {workflowPhase === 'generator' && (
                             <StoryGenerator 
+                                key={resetKey}
                                 aspectRatio={aspectRatio}
                                 onStoryGenerated={async (preview) => {
                                     applyState({
@@ -471,7 +521,6 @@ export const App: React.FC = () => {
                                             scenes: ep.scenes.map((s, j) => ({
                                                 ...s,
                                                 id: generateId() + j,
-                                                // IMPORTANT: Map existing shots from generator or create default if missing
                                                 shots: (s.shots && s.shots.length > 0) ? s.shots.map((shot, k) => ({
                                                     ...shot,
                                                     id: generateId() + k,
@@ -509,6 +558,7 @@ export const App: React.FC = () => {
 
                         {workflowPhase === 'episodes' && (
                             <EpisodeList 
+                                key={resetKey}
                                 episodes={episodes}
                                 activeEpisodeId={activeEpisodeId}
                                 onSelectEpisode={(id) => { setActiveEpisodeId(id); setWorkflowPhase('storyboard'); }}
@@ -527,6 +577,7 @@ export const App: React.FC = () => {
 
                         {workflowPhase === 'organizer' && (
                             <VisualOrganizer 
+                                key={resetKey}
                                 episodes={episodes}
                                 onUpdateEpisodes={(newEpisodes) => {
                                     setEpisodes(newEpisodes);
@@ -551,6 +602,7 @@ export const App: React.FC = () => {
                                     </button>
                                 </div>
                                 <Storyboard 
+                                    key={activeEpisode.id} // Force reset on episode change
                                     scenes={activeEpisode.scenes}
                                     characters={characters}
                                     storyboardStyle={storyboardStyle}
@@ -626,6 +678,7 @@ export const App: React.FC = () => {
 
                         {workflowPhase === 'utilities' && (
                             <Utilities 
+                                key={resetKey}
                                 episodes={episodes} 
                                 characters={characters}
                                 setEpisodes={setEpisodes}
@@ -646,6 +699,74 @@ export const App: React.FC = () => {
                 </main>
 
                 {/* --- MODALS --- */}
+                
+                {/* New Project Confirmation Modal */}
+                {showNewProjectConfirmation && (
+                    <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-700 p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-red-900/20 rounded-full">
+                                    <TrashIcon className="w-6 h-6 text-red-400" />
+                                </div>
+                                <h3 className="text-xl font-bold text-white">{t('unsavedChangesTitle')}</h3>
+                            </div>
+                            <p className="text-gray-300 mb-6">{t('unsavedChangesMessage')}</p>
+                            <div className="flex gap-3 justify-end">
+                                <button 
+                                    onClick={() => setShowNewProjectConfirmation(false)}
+                                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md text-sm font-medium transition-colors"
+                                >
+                                    {t('cancel')}
+                                </button>
+                                <button 
+                                    onClick={confirmNewProject}
+                                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors"
+                                >
+                                    {t('proceed')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Save Project Confirmation Modal */}
+                {showSaveConfirmation && (
+                    <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-700 p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-indigo-900/20 rounded-full">
+                                    <FloppyDiskIcon className="w-6 h-6 text-indigo-400" />
+                                </div>
+                                <h3 className="text-xl font-bold text-white">{t('confirmSaveTitle')}</h3>
+                            </div>
+                            <p className="text-gray-300 mb-6">{t('confirmSaveMessage')}</p>
+                            <div className="flex flex-col gap-3">
+                                {currentProjectId && (
+                                    <button 
+                                        onClick={() => confirmSaveProject(false)}
+                                        className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <FloppyDiskIcon className="w-4 h-4" />
+                                        {t('overwrite')}
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => confirmSaveProject(true)}
+                                    className={`w-full px-4 py-3 ${currentProjectId ? 'bg-gray-700 hover:bg-gray-600' : 'bg-indigo-600 hover:bg-indigo-500'} text-white rounded-md text-sm font-bold transition-colors`}
+                                >
+                                    {t('saveAsNew')}
+                                </button>
+                                <button 
+                                    onClick={() => setShowSaveConfirmation(false)}
+                                    className="w-full px-4 py-2 text-gray-400 hover:text-white text-sm transition-colors mt-2"
+                                >
+                                    {t('cancel')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {showPDFModal && (
                     <PDFExportModal
                         onExport={(opts) => {
@@ -740,6 +861,57 @@ export const App: React.FC = () => {
                             setShowModificationModal(true);
                         }}
                     />
+                )}
+
+                {/* Load Project Modal */}
+                {showLoadProjectModal && (
+                    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full border border-gray-700 flex flex-col max-h-[80vh]">
+                            <div className="flex justify-between items-center p-4 border-b border-gray-700">
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <FolderOpenIcon className="w-6 h-6 text-indigo-400" />
+                                    {t('loadProject')}
+                                </h3>
+                                <button onClick={() => setShowLoadProjectModal(false)} className="p-2 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition-colors">
+                                    <CloseIcon className="w-5 h-5"/>
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                                {isLoadingProjects ? (
+                                    <div className="text-center py-12">
+                                        <LoadingSpinner />
+                                        <p className="mt-4 text-gray-400">{t('fetchingProjects')}</p>
+                                    </div>
+                                ) : projectsList.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-500 flex flex-col items-center">
+                                        <FolderOpenIcon className="w-12 h-12 mb-3 opacity-30"/>
+                                        <p>{t('noProjectsFoundError')}</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-2">
+                                        {projectsList.map(p => (
+                                            <div key={p.id} onClick={() => handleLoadProject(p.id)} className="flex items-center justify-between p-4 bg-gray-700/30 hover:bg-gray-700 rounded-lg cursor-pointer group border border-transparent hover:border-indigo-500/50 transition-all">
+                                                <div>
+                                                    <h4 className="font-bold text-white text-lg">{p.name || t('untitledProject')}</h4>
+                                                    <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                                        <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                                        {t('modified')}: {new Date(p.modified).toLocaleDateString()} {new Date(p.modified).toLocaleTimeString()}
+                                                    </p>
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }}
+                                                    className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-900/20 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                                                    title={t('deleteProject')}
+                                                >
+                                                    <TrashIcon className="w-5 h-5"/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 )}
 
                 {/* Generation Offer Modal */}

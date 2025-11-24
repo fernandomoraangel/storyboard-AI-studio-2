@@ -53,6 +53,17 @@ export const translations = {
         visualOrganizerTitle: "Visual Organizer",
         videoGeneratorTab: "Video Generator",
         utilitiesTitle: "Utilities",
+        authorsTitle: "Project Authors",
+
+        // Authors
+        addAuthor: "Add Author",
+        authorName: "Name",
+        authorRole: "Role",
+        participation: "Participation (%)",
+        email: "Email",
+        totalParticipation: "Total Participation",
+        deleteAuthor: "Delete Author",
+        noAuthors: "No authors added yet.",
 
         // Story Generator
         storyIdea: "Story Idea",
@@ -542,6 +553,17 @@ export const translations = {
         visualOrganizerTitle: "Organizador Visual",
         videoGeneratorTab: "Generador de Video",
         utilitiesTitle: "Utilidades",
+        authorsTitle: "Autores del Proyecto",
+
+        // Authors
+        addAuthor: "Agregar Autor",
+        authorName: "Nombre",
+        authorRole: "Rol",
+        participation: "Participación (%)",
+        email: "Correo Electrónico",
+        totalParticipation: "Participación Total",
+        deleteAuthor: "Eliminar Autor",
+        noAuthors: "Aún no hay autores agregados.",
 
         // Story Generator
         storyIdea: "Idea de la Historia",

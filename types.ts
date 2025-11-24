@@ -81,6 +81,14 @@ export interface ArcPoint {
     isEpisodeAnchor?: boolean; // True if this point represents a fixed episode/structural anchor
 }
 
+export interface Author {
+    id: number;
+    name: string;
+    role: string;
+    participation: number; // 0-100
+    email: string;
+}
+
 export interface ProjectState {
   seriesTitle: string;
   authorName: string;
@@ -94,7 +102,8 @@ export interface ProjectState {
   subplots: string;
   soundtrackPrompt: string;
   references: Reference[];
-  narrativeArc: ArcPoint[]; // New field
+  narrativeArc: ArcPoint[]; 
+  authors: Author[]; // New field
   
   // Content
   episodes: Episode[];

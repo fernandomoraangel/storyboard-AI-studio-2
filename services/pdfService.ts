@@ -1,137 +1,286 @@
 
 import { jsPDF } from 'jspdf';
-import type { Scene, Character, Shot, StoryboardStyle, Reference, Episode, ArcPoint } from '../types';
+import type { Scene, Character, Shot, Reference, Episode, ArcPoint } from '../types';
 import type { PDFExportOptions } from '../components/PDFExportModal';
 
+// --- CONSTANTS & THEME ---
 const MARGIN = 15;
-const FONT_SIZES = {
-    H1: 24,
-    H2: 16,
-    H3: 12,
-    BODY: 10,
-    LABEL: 9,
-    TINY: 7,
-    FOOTER: 9,
-};
+const PAGE_HEIGHT = 297; // A4 mm
+const PAGE_WIDTH = 210;  // A4 mm
+const CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2);
+
 const COLORS = {
-    BLACK: '#000000',
-    GRAY_DARK: '#333333',
-    GRAY_MEDIUM: '#666666',
-    GRAY_LIGHT: '#CCCCCC',
-    BACKGROUND_LIGHT: '#F3F4F6',
-    PROMPT: '#555555',
-    RED: '#EF4444',
-    CYAN: '#06B6D4',
-    ORANGE: '#F59E0B',
+    BLACK: '#111827',
+    GRAY_DARK: '#374151',   
+    GRAY_MEDIUM: '#6b7280', 
+    GRAY_LIGHT: '#d1d5db',  
+    BG_LIGHT: '#f3f4f6',    
+    ACCENT: '#4f46e5',      
+    BORDER: '#e5e7eb',
 };
 
-const getImageDimensions = (dataUrl: string): Promise<{ width: number; height: number }> => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve({ width: img.width, height: img.height });
-        img.onerror = reject;
-        img.src = dataUrl;
-    });
+const FONTS = {
+    TITLE: 22,
+    HEADER: 14,
+    SUBHEADER: 11,
+    BODY: 9,
+    SMALL: 8,
+    TINY: 7
 };
 
-// Helper to add new page with footer
-const checkPageBreak = (doc: jsPDF, currentY: number, threshold: number): number => {
-    if (currentY > doc.internal.pageSize.height - threshold) {
-        doc.addPage();
-        return MARGIN;
-    }
-    return currentY;
+// --- HELPER FUNCTIONS ---
+
+// Estimate text height without drawing
+const getTextHeight = (doc: jsPDF, text: string, maxWidth: number, fontSize: number, lineHeightFactor: number = 1.2): number => {
+    if (!text) return 0;
+    doc.setFontSize(fontSize);
+    const lines = doc.splitTextToSize(text, maxWidth);
+    // 1 pt = 0.3527 mm
+    return lines.length * (fontSize * 0.3527 * lineHeightFactor);
 };
+
+// Draw wrapped text and return new Y position
+const printWrappedText = (
+    doc: jsPDF, 
+    text: string, 
+    x: number, 
+    y: number, 
+    maxWidth: number, 
+    fontSize: number, 
+    fontStyle: 'normal' | 'bold' | 'italic' = 'normal', 
+    color: string = COLORS.BLACK,
+    align: 'left' | 'center' | 'right' | 'justify' = 'left'
+): number => {
+    if (!text) return y;
+    
+    doc.setFontSize(fontSize);
+    doc.setFont('helvetica', fontStyle);
+    doc.setTextColor(color);
+    
+    const lines = doc.splitTextToSize(text, maxWidth);
+    const lineHeight = fontSize * 0.3527 * 1.2;
+    
+    doc.text(lines, x, y + (fontSize * 0.3527), { align, maxWidth }); // + adjustment for baseline
+    return y + (lines.length * lineHeight);
+};
+
+// --- COMPONENT DRAWERS ---
 
 const drawNarrativeArc = (doc: jsPDF, arc: ArcPoint[], startY: number, width: number): number => {
     if (!arc || arc.length === 0) return startY;
 
     let y = startY;
-    const height = 60;
+    const height = 45;
     const bottomY = y + height;
-    const plotWidth = width;
     
-    // Background
-    doc.setFillColor(250, 250, 250);
-    doc.rect(MARGIN, y, plotWidth, height, 'F');
+    // Container
+    doc.setDrawColor(COLORS.GRAY_LIGHT);
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(MARGIN, y, width, height + 15, 2, 2, 'FD');
     
-    // Axes
-    doc.setDrawColor(200, 200, 200);
-    doc.line(MARGIN, bottomY, MARGIN + plotWidth, bottomY); // X
-    doc.line(MARGIN, y, MARGIN, bottomY); // Y
-
-    // Labels
-    doc.setFontSize(FONT_SIZES.TINY);
+    // Title
+    doc.setFontSize(FONTS.SMALL);
     doc.setTextColor(COLORS.GRAY_MEDIUM);
-    
-    // Plot Points
-    const sortedPoints = [...arc].sort((a, b) => (a.x || 0) - (b.x || 0));
+    doc.text("Narrative Arc", MARGIN + 5, y + 5);
+
+    y += 5;
+
+    // Axes
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.5);
+    doc.line(MARGIN + 10, bottomY, MARGIN + width - 10, bottomY); // X
+    doc.line(MARGIN + 10, y + 5, MARGIN + 10, bottomY); // Y
+
+    // Plotting
     const maxX = 100;
     const maxY = 10;
+    const plotW = width - 20;
+    const plotX = MARGIN + 10;
+    
+    const getX = (val: number) => plotX + (val / maxX) * plotW;
+    const getY = (val: number) => bottomY - (val / maxY) * (height - 5);
 
-    // Helper to map coordinates
-    const getX = (val: number) => MARGIN + (val / maxX) * plotWidth;
-    const getY = (val: number) => bottomY - (val / maxY) * height;
+    const sorted = [...arc].sort((a, b) => (a.x || 0) - (b.x || 0));
 
-    const curves = [
-        { key: 'tension', color: COLORS.RED, label: 'Tension' },
-        { key: 'emotion', color: COLORS.CYAN, label: 'Emotion' },
-        { key: 'conflict', color: COLORS.ORANGE, label: 'Conflict' }
-    ];
-
-    curves.forEach((curve, idx) => {
-        doc.setDrawColor(curve.color);
-        doc.setLineWidth(0.5);
+    const drawCurve = (key: 'tension' | 'emotion' | 'conflict', color: string) => {
+        doc.setDrawColor(color);
+        doc.setLineWidth(0.7);
+        let lastX = -1, lastY = -1;
         
-        for (let i = 0; i < sortedPoints.length - 1; i++) {
-            const p1 = sortedPoints[i];
-            const p2 = sortedPoints[i+1];
+        sorted.forEach(p => {
+            const px = getX(p.x || 0);
+            const py = getY((p as any)[key]);
             
-            const x1 = getX(p1.x || 0);
-            const y1 = getY((p1 as any)[curve.key]);
-            const x2 = getX(p2.x || 0);
-            const y2 = getY((p2 as any)[curve.key]);
+            if (lastX !== -1) {
+                doc.line(lastX, lastY, px, py);
+            }
+            lastX = px;
+            lastY = py;
             
-            doc.line(x1, y1, x2, y2);
+            // Dot
+            doc.setFillColor(color);
+            doc.circle(px, py, 0.8, 'F');
+        });
+    };
+
+    drawCurve('tension', '#ef4444');
+    drawCurve('emotion', '#06b6d4');
+    drawCurve('conflict', '#f59e0b');
+
+    // Legend
+    const legY = bottomY + 8;
+    doc.setFontSize(FONTS.TINY);
+    doc.setTextColor('#ef4444'); doc.text("● Tension", MARGIN + 15, legY);
+    doc.setTextColor('#06b6d4'); doc.text("● Emotion", MARGIN + 45, legY);
+    doc.setTextColor('#f59e0b'); doc.text("● Conflict", MARGIN + 75, legY);
+
+    return bottomY + 20; 
+};
+
+const getValidTechFields = (shot: Shot, t: (key: string) => string) => {
+    return [
+        { l: t('cameraMovement'), v: shot.cameraMovement },
+        { l: t('cameraType'), v: shot.cameraType },
+        { l: t('lensType'), v: shot.lensType },
+        { l: t('lightingScheme'), v: shot.lighting },
+        { l: t('soundFx'), v: shot.soundFx },
+        { l: t('style'), v: shot.style },
+        { l: t('atmosphere'), v: shot.atmosphere },
+    ].filter(f => f.v && f.v !== 'None' && f.v !== 'Unassigned' && f.v !== 'Default' && f.v !== 'N/A');
+};
+
+const calculateShotHeight = (doc: jsPDF, shot: Shot, width: number, includeTech: boolean, t: (key: string) => string): number => {
+    const imgHeight = width * (9/16);
+    const headerHeight = 10; // Shot type + duration
+    const descHeight = getTextHeight(doc, shot.description, width, FONTS.BODY) + 5;
+    
+    let techHeight = 0;
+    if (includeTech) {
+        const validFields = getValidTechFields(shot, t);
+        if (validFields.length > 0) {
+            const boxPadding = 3;
+            const rowHeight = 4;
+            const rows = Math.ceil(validFields.length / 2); 
+            const boxHeight = (rows * rowHeight) + (boxPadding * 2) + 2;
+            techHeight = boxHeight + 4; // + margin
         }
-
-        // Legend
-        doc.setTextColor(curve.color);
-        doc.text(curve.label, MARGIN + (idx * 40), bottomY + 5);
-    });
-
-    doc.setTextColor(COLORS.BLACK);
-    return bottomY + 15;
+    }
+    
+    return imgHeight + headerHeight + descHeight + techHeight + 5; // + padding
 };
 
-const drawReferences = (doc: jsPDF, references: Reference[], startY: number): number => {
-    if (!references || references.length === 0) return startY;
+const drawShotCard = (
+    doc: jsPDF, 
+    shot: Shot, 
+    index: number, 
+    x: number, 
+    y: number, 
+    width: number, 
+    t: (key: string) => string,
+    options: PDFExportOptions
+): number => {
+    const startY = y;
+    let currentY = y;
 
-    let y = startY;
-    doc.setFontSize(FONT_SIZES.H2);
-    doc.text("References", MARGIN, y);
-    y += 10;
+    // 1. IMAGE
+    const imgHeight = width * (9/16);
+    doc.setFillColor(240, 240, 240);
+    doc.rect(x, currentY, width, imgHeight, 'F'); // Placeholder
 
-    doc.setFontSize(FONT_SIZES.BODY);
-    references.forEach(ref => {
-        y = checkPageBreak(doc, y, 30);
-        
-        // Title (Link)
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(0, 0, 255);
-        doc.textWithLink(ref.title, MARGIN, y, { url: ref.uri });
-        doc.setTextColor(COLORS.BLACK);
-        y += 5;
+    if (shot.imageUrl && shot.imageUrl.startsWith('data:')) {
+        try {
+            doc.addImage(shot.imageUrl, 'PNG', x, currentY, width, imgHeight, undefined, 'FAST');
+        } catch (e) {
+            // Fallback text if image fails (e.g. corrupt base64)
+            doc.setFontSize(FONTS.TINY);
+            doc.setTextColor(COLORS.GRAY_MEDIUM);
+            doc.text(t('pdfImageNotAvailable'), x + width/2, currentY + imgHeight/2, { align: 'center' });
+        }
+    } else {
+        doc.setFontSize(FONTS.TINY);
+        doc.setTextColor(COLORS.GRAY_MEDIUM);
+        doc.text(t('noImage'), x + width/2, currentY + imgHeight/2, { align: 'center' });
+    }
+    
+    // Shot Number Tag
+    doc.setFillColor(COLORS.ACCENT);
+    doc.rect(x, currentY, 12, 6, 'F');
+    doc.setTextColor('#FFFFFF');
+    doc.setFontSize(FONTS.TINY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${index}`, x + 6, currentY + 4, { align: 'center' });
 
-        // Description
-        doc.setFont("helvetica", "normal");
-        const descLines = doc.splitTextToSize(ref.description, 180);
-        doc.text(descLines, MARGIN, y);
-        y += (descLines.length * 5) + 5;
-    });
+    // Duration Tag
+    doc.setFillColor(COLORS.BLACK); // Use solid black instead of rgba
+    const durText = `${shot.duration}s`;
+    const durW = doc.getTextWidth(durText) + 4;
+    doc.rect(x + width - durW, currentY + imgHeight - 6, durW, 6, 'F');
+    doc.text(durText, x + width - durW/2, currentY + imgHeight - 2, { align: 'center' });
 
-    return y;
+    currentY += imgHeight + 4;
+
+    // 2. HEADER
+    doc.setTextColor(COLORS.ACCENT);
+    doc.setFontSize(FONTS.BODY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(shot.shotType || t('shot'), x, currentY);
+    currentY += 5;
+
+    // 3. DESCRIPTION
+    currentY = printWrappedText(doc, shot.description, x, currentY, width, FONTS.BODY, 'normal', COLORS.BLACK);
+    currentY += 2;
+
+    // 4. TECHNICAL DETAILS
+    if (options.includeTechDetails) {
+        const techFields = getValidTechFields(shot, t);
+
+        if (techFields.length > 0) {
+            // Background box
+            const boxPadding = 3;
+            const rowHeight = 4;
+            // Calculate box height based on items
+            const rows = Math.ceil(techFields.length / 2); // 2 cols
+            const boxHeight = (rows * rowHeight) + (boxPadding * 2) + 2;
+
+            doc.setFillColor(COLORS.BG_LIGHT);
+            doc.roundedRect(x, currentY, width, boxHeight, 1, 1, 'F');
+            
+            let innerY = currentY + boxPadding + 3;
+            const colW = (width - (boxPadding*2)) / 2;
+
+            techFields.forEach((field, idx) => {
+                const isRight = idx % 2 !== 0;
+                const colX = isRight ? x + boxPadding + colW : x + boxPadding;
+                
+                // Label
+                doc.setFontSize(FONTS.TINY);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(COLORS.GRAY_MEDIUM);
+                doc.text(field.l.substring(0, 12) + ":", colX, innerY);
+                
+                // Value
+                doc.setTextColor(COLORS.GRAY_DARK);
+                doc.setFont('helvetica', 'normal');
+                const valX = colX + doc.getTextWidth(field.l.substring(0, 12) + ": ");
+                
+                // Simple truncation
+                let valText = field.v;
+                if (doc.getTextWidth(valText) > (colW - 25)) {
+                    valText = valText.substring(0, 15) + "...";
+                }
+                doc.text(valText, valX, innerY);
+
+                if (isRight) innerY += rowHeight;
+            });
+            
+            currentY += boxHeight + 4;
+        }
+    }
+
+    return currentY - startY;
 };
+
+// --- MAIN EXPORT FUNCTION ---
 
 export const exportStoryboardToPDF = async (
     title: string,
@@ -150,297 +299,339 @@ export const exportStoryboardToPDF = async (
     narrativeArc: ArcPoint[],
     options: PDFExportOptions
 ) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const contentWidth = pageWidth - (MARGIN * 2);
-    let y = MARGIN;
+    try {
+        const doc = new jsPDF();
+        let currentY = MARGIN;
 
-    // --- COVER PAGE ---
-    if (options.includeCover) {
-        y = pageHeight / 3;
-        doc.setFontSize(FONT_SIZES.H1);
-        doc.setFont("helvetica", "bold");
-        doc.text(title, pageWidth / 2, y, { align: "center" });
-        y += 15;
-        
-        if (author) {
-            doc.setFontSize(FONT_SIZES.H3);
-            doc.setFont("helvetica", "normal");
-            doc.text(t('pdfByAuthor').replace('{authorName}', author), pageWidth / 2, y, { align: "center" });
-            y += 20;
-        }
-
-        doc.setFontSize(FONT_SIZES.BODY);
-        doc.setTextColor(COLORS.GRAY_MEDIUM);
-        doc.text(`${t('pdfGeneratedOn')}: ${new Date().toLocaleDateString()}`, pageWidth / 2, y, { align: "center" });
-        
-        if (options.includeMetadata) {
-            y = pageHeight - 50;
-            doc.setFontSize(FONT_SIZES.TINY);
-            doc.text(`${t('storyboardStyleLabel')}: ${style}`, pageWidth / 2, y, { align: "center" });
-            y += 5;
-            doc.text(`${t('aspectRatioLabel')}: ${aspectRatio}`, pageWidth / 2, y, { align: "center" });
-            y += 5;
-            doc.text(`${t('characters')}: ${characters.length}`, pageWidth / 2, y, { align: "center" });
-        }
-        
-        doc.addPage();
-        y = MARGIN;
-        doc.setTextColor(COLORS.BLACK);
-    }
-
-    // --- STORY BIBLE ---
-    if (options.includeBible) {
-        doc.setFontSize(FONT_SIZES.H2);
-        doc.setFont("helvetica", "bold");
-        doc.text(t('outlineTab'), MARGIN, y);
-        y += 10;
-
-        doc.setFontSize(FONT_SIZES.H3);
-        doc.text(t('logline'), MARGIN, y);
-        y += 6;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(FONT_SIZES.BODY);
-        const loglineLines = doc.splitTextToSize(logline, contentWidth);
-        doc.text(loglineLines, MARGIN, y);
-        y += (loglineLines.length * 5) + 10;
-
-        doc.setFontSize(FONT_SIZES.H3);
-        doc.setFont("helvetica", "bold");
-        doc.text(t('treatment'), MARGIN, y);
-        y += 6;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(FONT_SIZES.BODY);
-        const treatmentLines = doc.splitTextToSize(treatment, contentWidth);
-        doc.text(treatmentLines, MARGIN, y);
-        y += (treatmentLines.length * 5) + 10;
-
-        // NARRATIVE ARC (Inserted here as requested)
-        if (options.includeNarrativeArc && narrativeArc.length > 0) {
-            y = checkPageBreak(doc, y, 80);
-            doc.setFontSize(FONT_SIZES.H3);
-            doc.setFont("helvetica", "bold");
-            doc.text(t('narrativeArcTitle'), MARGIN, y);
-            y += 8;
-            y = drawNarrativeArc(doc, narrativeArc, y, contentWidth);
-            y += 10;
-        }
-
-        if (structuralAnalysis) {
-            y = checkPageBreak(doc, y, 50);
-            doc.setFontSize(FONT_SIZES.H3);
-            doc.setFont("helvetica", "bold");
-            doc.text(t('structuralAnalysis'), MARGIN, y);
-            y += 6;
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(FONT_SIZES.BODY);
-            const structLines = doc.splitTextToSize(structuralAnalysis, contentWidth);
-            doc.text(structLines, MARGIN, y);
-            y += (structLines.length * 5) + 10;
-        }
-
-        if (soundtrackPrompt) {
-            y = checkPageBreak(doc, y, 30);
-            doc.setFontSize(FONT_SIZES.H3);
-            doc.setFont("helvetica", "bold");
-            doc.text(t('pdfSoundtrackPrompt'), MARGIN, y);
-            y += 6;
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(FONT_SIZES.BODY);
-            const soundLines = doc.splitTextToSize(soundtrackPrompt, contentWidth);
-            doc.text(soundLines, MARGIN, y);
-            y += (soundLines.length * 5) + 15;
-        }
-        
-        doc.addPage();
-        y = MARGIN;
-    }
-
-    // --- CHARACTERS ---
-    if (options.includeCharacters && characters.length > 0) {
-        doc.setFontSize(FONT_SIZES.H2);
-        doc.setFont("helvetica", "bold");
-        doc.text(t('characters'), MARGIN, y);
-        y += 10;
-
-        for (const char of characters) {
-            y = checkPageBreak(doc, y, 60);
-            
-            // Character Name & Role
-            doc.setFontSize(FONT_SIZES.H3);
-            doc.setFont("helvetica", "bold");
-            doc.text(`${char.name} (${char.role})`, MARGIN, y);
-            y += 6;
-
-            // Details
-            doc.setFontSize(FONT_SIZES.BODY);
-            doc.setFont("helvetica", "normal");
-            
-            const details = [
-                `${t('pdfPersonality')}: ${char.personality}`,
-                `${t('pdfAppearance')}: ${char.appearance}`,
-                `${t('characterOutfit')}: ${char.outfit}`
-            ];
-
-            details.forEach(detail => {
-                const lines = doc.splitTextToSize(detail, contentWidth);
-                doc.text(lines, MARGIN, y);
-                y += (lines.length * 5) + 2;
-            });
-
-            // Image (First available)
-            if (char.images && char.images.length > 0) {
-                const imgData = char.images[0];
-                if (imgData.startsWith('data:image')) {
-                    try {
-                        const dims = await getImageDimensions(imgData);
-                        const imgHeight = 50;
-                        const imgWidth = (dims.width / dims.height) * imgHeight;
-                        
-                        if (y + imgHeight > pageHeight - MARGIN) {
-                            doc.addPage();
-                            y = MARGIN;
-                        }
-                        
-                        doc.addImage(imgData, 'PNG', MARGIN, y, imgWidth, imgHeight);
-                        y += imgHeight + 5;
-                    } catch (e) {
-                        console.warn("Failed to add character image to PDF", e);
-                    }
-                }
+        const checkBreak = (heightNeeded: number) => {
+            if (currentY + heightNeeded > PAGE_HEIGHT - MARGIN) {
+                doc.addPage();
+                currentY = MARGIN;
+                return true;
             }
-            y += 10;
-        }
-        doc.addPage();
-        y = MARGIN;
-    }
+            return false;
+        };
 
-    // --- EPISODES & STORYBOARD ---
-    const episodesToExport = options.includeAllEpisodes 
-        ? episodes 
-        : episodes.filter(e => e.id === activeEpisodeId);
-
-    for (const ep of episodesToExport) {
-        doc.setFontSize(FONT_SIZES.H2);
-        doc.setFont("helvetica", "bold");
-        doc.text(ep.title, MARGIN, y);
-        y += 8;
-        
-        doc.setFontSize(FONT_SIZES.BODY);
-        doc.setFont("helvetica", "italic");
-        const synLines = doc.splitTextToSize(ep.synopsis, contentWidth);
-        doc.text(synLines, MARGIN, y);
-        y += (synLines.length * 5) + 10;
-
-        for (const [sIndex, scene] of ep.scenes.entries()) {
-            y = checkPageBreak(doc, y, 40);
+        // --- 1. COVER PAGE ---
+        if (options.includeCover) {
+            currentY += 60;
             
-            // Scene Header
-            doc.setFillColor(COLORS.GRAY_DARK);
-            doc.rect(MARGIN, y, contentWidth, 8, 'F');
-            doc.setTextColor('#FFFFFF');
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(FONT_SIZES.H3);
-            doc.text(`${t('scene')} ${sIndex + 1}: ${scene.title}`, MARGIN + 2, y + 6);
+            // Title
+            doc.setFontSize(FONTS.TITLE + 6);
+            doc.setFont('helvetica', 'bold');
             doc.setTextColor(COLORS.BLACK);
-            y += 12;
+            const titleLines = doc.splitTextToSize(title.toUpperCase(), CONTENT_WIDTH);
+            doc.text(titleLines, PAGE_WIDTH / 2, currentY, { align: 'center' });
+            currentY += (titleLines.length * 12) + 10;
 
-            // Scene Metadata
-            doc.setFontSize(FONT_SIZES.LABEL);
-            doc.setFont("helvetica", "bold");
-            doc.text(`${scene.location} | ${scene.setting}`, MARGIN, y);
-            y += 5;
-            
-            doc.setFont("helvetica", "normal");
-            const actionLines = doc.splitTextToSize(scene.actions, contentWidth);
-            doc.text(actionLines, MARGIN, y);
-            y += (actionLines.length * 4) + 5;
-
-            // SHOTS
-            for (const [shIndex, shot] of scene.shots.entries()) {
-                const shotHeight = options.layout === 'compact' ? 70 : 100; 
-                y = checkPageBreak(doc, y, shotHeight);
-
-                const shotWidth = options.layout === 'compact' ? (contentWidth / 2) - 5 : contentWidth * 0.6;
-                const textX = options.layout === 'compact' ? MARGIN : MARGIN + shotWidth + 5;
-                
-                // Image
-                if (shot.imageUrl && shot.imageUrl.startsWith('data:image')) {
-                    try {
-                        // Calculate 16:9 usually
-                        const displayH = shotWidth * (9/16);
-                        doc.addImage(shot.imageUrl, 'PNG', MARGIN, y, shotWidth, displayH);
-                        // Draw border
-                        doc.setDrawColor(COLORS.GRAY_LIGHT);
-                        doc.rect(MARGIN, y, shotWidth, displayH);
-                    } catch (e) {
-                        // Placeholder
-                        doc.setFillColor(COLORS.BACKGROUND_LIGHT);
-                        doc.rect(MARGIN, y, shotWidth, shotWidth * (9/16), 'F');
-                        doc.setFontSize(FONT_SIZES.TINY);
-                        doc.text(t('pdfImageNotAvailable'), MARGIN + 5, y + 20);
-                    }
-                } else {
-                    // Placeholder box
-                    doc.setFillColor(COLORS.BACKGROUND_LIGHT);
-                    doc.rect(MARGIN, y, shotWidth, shotWidth * (9/16), 'F');
-                    doc.setFontSize(FONT_SIZES.TINY);
-                    doc.text(t('pdfImageNotAvailable'), MARGIN + 5, y + 20);
-                }
-
-                // Text Info
-                let infoY = options.layout === 'compact' ? y + (shotWidth * (9/16)) + 5 : y;
-                const infoWidth = options.layout === 'compact' ? shotWidth : (contentWidth - shotWidth - 5);
-                const infoX = options.layout === 'compact' ? MARGIN : MARGIN + shotWidth + 5;
-
-                doc.setFontSize(FONT_SIZES.H3);
-                doc.setFont("helvetica", "bold");
-                doc.text(`${t('shot')} ${shIndex + 1}`, infoX, infoY + 4);
-                infoY += 8;
-
-                doc.setFontSize(FONT_SIZES.BODY);
-                doc.setFont("helvetica", "normal");
-                const desc = doc.splitTextToSize(shot.description, infoWidth);
-                doc.text(desc, infoX, infoY);
-                infoY += (desc.length * 5) + 3;
-
-                // Tech Details (Conditional)
-                if (options.includeTechDetails) {
-                    doc.setFontSize(FONT_SIZES.TINY);
-                    doc.setTextColor(COLORS.GRAY_MEDIUM);
-                    
-                    const techLines = [
-                        `${t('shotType')}: ${shot.shotType}`,
-                        `${t('cameraMovement')}: ${shot.cameraMovement}`,
-                        `${t('lensType')}: ${shot.lensType}`,
-                        `${t('lightingScheme')}: ${shot.lighting}`,
-                    ];
-                    
-                    techLines.forEach(line => {
-                        doc.text(line, infoX, infoY);
-                        infoY += 3.5;
-                    });
-                    doc.setTextColor(COLORS.BLACK);
-                }
-
-                y += options.layout === 'compact' ? (shotWidth * (9/16)) + 40 : shotHeight; // increment Y for next shot
-                
-                // If compact and even index (0, 2...), we might want to put next shot on same row, but for simplicity in this
-                // robust implementation, I am sticking to a vertical flow.
-                // To implement true 2-column grid in PDF is complex with variable text height. 
-                // The "Compact" option here just reduces image size to save vertical space.
+            // Subtitle / Author
+            if (author) {
+                doc.setFontSize(FONTS.HEADER);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(COLORS.GRAY_DARK);
+                doc.text(t('pdfByAuthor').replace('{authorName}', author), PAGE_WIDTH / 2, currentY, { align: 'center' });
+                currentY += 40;
             }
-            y += 10; // Space between scenes
+
+            // Metadata Table
+            if (options.includeMetadata) {
+                const startX = PAGE_WIDTH / 2 - 70;
+                const col1 = startX;
+                const col2 = startX + 80;
+                
+                const drawRow = (lbl: string, val: string) => {
+                    doc.setFontSize(FONTS.BODY);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(COLORS.BLACK);
+                    doc.text(lbl, col1, currentY);
+                    
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(COLORS.GRAY_DARK);
+                    doc.text(val, col2, currentY);
+                    
+                    doc.setDrawColor(COLORS.GRAY_LIGHT);
+                    doc.line(col1, currentY + 2, col2 + 50, currentY + 2);
+                    currentY += 10;
+                };
+
+                drawRow(t('storyboardStyleLabel'), style);
+                drawRow(t('aspectRatioLabel'), aspectRatio);
+                drawRow(t('episodes'), episodes.length.toString());
+                drawRow(t('characters'), characters.length.toString());
+                drawRow(t('pdfGeneratedOn'), new Date().toLocaleDateString());
+            }
+
+            doc.addPage();
+            currentY = MARGIN;
         }
-        doc.addPage();
-        y = MARGIN;
-    }
 
-    // --- REFERENCES (At the end) ---
-    if (options.includeReferences && references.length > 0) {
-        drawReferences(doc, references, y);
-    }
+        // --- 2. STORY BIBLE ---
+        if (options.includeBible) {
+            doc.setFontSize(FONTS.TITLE);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(COLORS.ACCENT);
+            doc.text(t('outlineTab'), MARGIN, currentY);
+            currentY += 15;
 
-    doc.save(`${title.replace(/ /g, '_')}_Storyboard.pdf`);
+            // Logline Box
+            doc.setFillColor(COLORS.BG_LIGHT);
+            doc.setDrawColor(COLORS.ACCENT);
+            doc.rect(MARGIN, currentY, CONTENT_WIDTH, 25, 'FD');
+            
+            doc.setFontSize(FONTS.SUBHEADER);
+            doc.setTextColor(COLORS.ACCENT);
+            doc.text(t('logline').toUpperCase(), MARGIN + 5, currentY + 8);
+            
+            const logY = currentY + 15;
+            printWrappedText(doc, logline, MARGIN + 5, logY, CONTENT_WIDTH - 10, FONTS.BODY, 'italic', COLORS.GRAY_DARK);
+            currentY += 35;
+
+            // Narrative Arc
+            if (options.includeNarrativeArc && narrativeArc.length > 0) {
+                checkBreak(60);
+                currentY = drawNarrativeArc(doc, narrativeArc, currentY, CONTENT_WIDTH);
+                currentY += 10;
+            }
+
+            // Structural Analysis
+            if (structuralAnalysis) {
+                checkBreak(60);
+                doc.setFontSize(FONTS.HEADER);
+                doc.setTextColor(COLORS.BLACK);
+                doc.text(t('structuralAnalysis'), MARGIN, currentY);
+                currentY += 8;
+                currentY = printWrappedText(doc, structuralAnalysis, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY);
+                currentY += 10;
+            }
+
+            // Treatment
+            if (treatment) {
+                checkBreak(60);
+                doc.setFontSize(FONTS.HEADER);
+                doc.setTextColor(COLORS.BLACK);
+                doc.text(t('treatment'), MARGIN, currentY);
+                currentY += 8;
+                currentY = printWrappedText(doc, treatment, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY);
+                currentY += 10;
+            }
+
+            doc.addPage();
+            currentY = MARGIN;
+        }
+
+        // --- 3. CHARACTERS ---
+        if (options.includeCharacters && characters.length > 0) {
+            doc.setFontSize(FONTS.TITLE);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(COLORS.ACCENT);
+            doc.text(t('characters'), MARGIN, currentY);
+            currentY += 15;
+
+            for (const char of characters) {
+                checkBreak(65);
+
+                // Card
+                doc.setDrawColor(COLORS.BORDER);
+                doc.setFillColor(255, 255, 255);
+                doc.roundedRect(MARGIN, currentY, CONTENT_WIDTH, 60, 2, 2, 'FD');
+
+                // Image
+                if (char.images.length > 0 && char.images[0].startsWith('data:')) {
+                    try {
+                        doc.addImage(char.images[0], 'PNG', MARGIN + 2, currentY + 2, 35, 56, undefined, 'FAST');
+                    } catch(e) {}
+                } else {
+                    doc.setFillColor(COLORS.BG_LIGHT);
+                    doc.rect(MARGIN + 2, currentY + 2, 35, 56, 'F');
+                }
+
+                // Data
+                const textX = MARGIN + 42;
+                let textY = currentY + 10;
+                const textW = CONTENT_WIDTH - 45;
+
+                doc.setFontSize(FONTS.HEADER);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(COLORS.BLACK);
+                doc.text(char.name, textX, textY);
+                
+                doc.setFontSize(FONTS.BODY);
+                doc.setFont('helvetica', 'italic');
+                doc.setTextColor(COLORS.GRAY_MEDIUM);
+                doc.text(char.role, textX + doc.getTextWidth(char.name) + 3, textY);
+                
+                textY += 10;
+
+                const printField = (label: string, val: string) => {
+                    doc.setFontSize(FONTS.SMALL);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(COLORS.GRAY_DARK);
+                    doc.text(label + ": ", textX, textY);
+                    const lw = doc.getTextWidth(label + ": ");
+                    
+                    doc.setFont('helvetica', 'normal');
+                    const lines = doc.splitTextToSize(val, textW - lw);
+                    doc.text(lines, textX + lw, textY);
+                    textY += (lines.length * 4) + 2;
+                };
+
+                printField(t('pdfPersonality'), char.personality);
+                printField(t('pdfAppearance'), char.appearance);
+                printField(t('characterOutfit'), char.outfit);
+
+                currentY += 65;
+            }
+            doc.addPage();
+            currentY = MARGIN;
+        }
+
+        // --- 4. EPISODES (STORYBOARD) ---
+        const episodesToExport = options.includeAllEpisodes 
+            ? episodes 
+            : episodes.filter(e => e.id === activeEpisodeId);
+
+        for (const ep of episodesToExport) {
+            if (currentY !== MARGIN) {
+                doc.addPage();
+                currentY = MARGIN;
+            }
+
+            // Episode Header
+            doc.setFillColor(COLORS.BLACK);
+            doc.rect(0, currentY - 10, PAGE_WIDTH, 25, 'F');
+            
+            doc.setTextColor('#FFFFFF');
+            doc.setFontSize(FONTS.TITLE);
+            doc.setFont('helvetica', 'bold');
+            doc.text(ep.title, MARGIN, currentY + 8);
+            currentY += 25;
+
+            // Synopsis
+            if (ep.synopsis) {
+                doc.setFontSize(FONTS.SUBHEADER);
+                doc.setTextColor(COLORS.ACCENT);
+                doc.setFont('helvetica', 'bold');
+                doc.text("Synopsis", MARGIN, currentY);
+                currentY += 6;
+                currentY = printWrappedText(doc, ep.synopsis, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY, 'italic', COLORS.GRAY_DARK);
+                currentY += 15;
+            }
+
+            for (const [sIndex, scene] of ep.scenes.entries()) {
+                checkBreak(40);
+
+                // Scene Header
+                doc.setDrawColor(COLORS.ACCENT);
+                doc.setLineWidth(0.8);
+                doc.line(MARGIN, currentY, MARGIN + CONTENT_WIDTH, currentY);
+                currentY += 6;
+
+                doc.setFontSize(FONTS.HEADER);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(COLORS.BLACK);
+                doc.text(`${t('scene')} ${sIndex + 1}: ${scene.title}`, MARGIN, currentY);
+                
+                doc.setFontSize(FONTS.SMALL);
+                doc.setTextColor(COLORS.GRAY_MEDIUM);
+                const locInfo = `${scene.location || ''} ${scene.setting ? `| ${scene.setting}` : ''}`;
+                doc.text(locInfo, MARGIN + CONTENT_WIDTH - doc.getTextWidth(locInfo), currentY);
+                currentY += 8;
+
+                if (scene.actions) {
+                    currentY = printWrappedText(doc, scene.actions, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY, 'normal', COLORS.GRAY_DARK);
+                    currentY += 8;
+                }
+
+                // SHOTS LAYOUT
+                const gap = 6;
+                if (options.layout === 'compact') {
+                    // 2 Columns
+                    const colWidth = (CONTENT_WIDTH - gap) / 2;
+                    
+                    for (let i = 0; i < scene.shots.length; i += 2) {
+                        const shotA = scene.shots[i];
+                        const shotB = scene.shots[i+1];
+
+                        // Calculate Max Height Needed for this Row
+                        const heightA = calculateShotHeight(doc, shotA, colWidth, options.includeTechDetails, t);
+                        const heightB = shotB ? calculateShotHeight(doc, shotB, colWidth, options.includeTechDetails, t) : 0;
+                        const rowHeight = Math.max(heightA, heightB);
+
+                        if (checkBreak(rowHeight + 10)) {
+                            // If break, we are at top of new page
+                        }
+
+                        const rowStartY = currentY;
+
+                        // Draw A
+                        const usedA = drawShotCard(doc, shotA, i+1, MARGIN, rowStartY, colWidth, t, options);
+                        
+                        // Draw B
+                        let usedB = 0;
+                        if (shotB) {
+                            usedB = drawShotCard(doc, shotB, i+2, MARGIN + colWidth + gap, rowStartY, colWidth, t, options);
+                        }
+
+                        currentY += Math.max(usedA, usedB) + gap + 5;
+                    }
+
+                } else {
+                    // 1 Column (Standard)
+                    const shotWidth = CONTENT_WIDTH * 0.8;
+                    const shotX = MARGIN + (CONTENT_WIDTH - shotWidth) / 2;
+
+                    for (const [i, shot] of scene.shots.entries()) {
+                        const estHeight = calculateShotHeight(doc, shot, shotWidth, options.includeTechDetails, t);
+                        checkBreak(estHeight + 10);
+
+                        const usedH = drawShotCard(doc, shot, i+1, shotX, currentY, shotWidth, t, options);
+                        currentY += usedH + gap + 5;
+                    }
+                }
+                
+                currentY += 10; // Space between scenes
+            }
+        }
+
+        // --- 5. REFERENCES ---
+        if (options.includeReferences && references.length > 0) {
+            doc.addPage();
+            currentY = MARGIN;
+            doc.setFontSize(FONTS.TITLE);
+            doc.setTextColor(COLORS.BLACK);
+            doc.text(t('references'), MARGIN, currentY);
+            currentY += 15;
+
+            references.forEach(ref => {
+                checkBreak(30);
+                doc.setTextColor(COLORS.ACCENT);
+                doc.setFontSize(FONTS.SUBHEADER);
+                
+                // Safe link handling
+                doc.text(ref.title, MARGIN, currentY);
+                const w = doc.getTextWidth(ref.title);
+                doc.link(MARGIN, currentY - 5, w, 6, { url: ref.uri });
+
+                currentY += 6;
+                currentY = printWrappedText(doc, ref.description, MARGIN, currentY, CONTENT_WIDTH, FONTS.SMALL, 'normal', COLORS.GRAY_DARK);
+                currentY += 8;
+            });
+        }
+
+        // --- 6. FOOTER ---
+        const totalPages = doc.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            doc.setFontSize(8);
+            doc.setTextColor(COLORS.GRAY_LIGHT);
+            doc.text(`${t('pdfPageInfo').replace('{page}', i.toString()).replace('{total}', totalPages.toString())}`, PAGE_WIDTH / 2, PAGE_HEIGHT - 10, { align: 'center' });
+        }
+
+        const safeName = (title.replace(/[^a-z0-9]/gi, '_') || 'Storyboard');
+        doc.save(`${safeName}.pdf`);
+        
+    } catch (e) {
+        console.error("PDF Generation Error:", e);
+        alert("Failed to generate PDF. Please check the console for details.\nError: " + (e as Error).message);
+    }
 };

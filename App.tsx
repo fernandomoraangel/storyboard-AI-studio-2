@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LanguageContext, LanguageContextType } from './contexts/languageContext';
 import { translations, Language } from './lib/translations';
-import { Episode, Character, Scene, Shot, StoryboardStyle, ProjectState, Reference, ArcPoint, CustomStyle } from './types';
+import { Episode, Character, Scene, Shot, StoryboardStyle, ProjectState, Reference, ArcPoint, CustomStyle, Author } from './types';
 import { saveProject, getProjectsList, getProject, deleteProject, saveCustomStyle, getCustomStyles, deleteCustomStyle, Project } from './lib/db';
 
 // Components
@@ -13,6 +13,7 @@ import { VisualOrganizer } from './components/VisualOrganizer';
 import { NarrativeArcEditor } from './components/NarrativeArcEditor';
 import { VideoGenerator } from './components/VideoGenerator';
 import { Utilities } from './components/Utilities';
+import { ProjectAuthors } from './components/ProjectAuthors';
 import { EpisodeList } from './components/EpisodeList';
 import { LanguageSelector } from './components/LanguageSelector';
 import { PDFExportModal } from './components/PDFExportModal';
@@ -24,7 +25,7 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { 
     LayoutGridIcon, FilmIcon, UserIcon, BookOpenIcon, VideoIcon, ChartBarIcon, 
     ActivityIcon, FloppyDiskIcon, FolderOpenIcon, TrashIcon, PlusIcon, 
-    ChevronLeftIcon, ChevronRightIcon, WandIcon, CloseIcon
+    ChevronLeftIcon, ChevronRightIcon, WandIcon, CloseIcon, UsersIcon
 } from './components/icons';
 import { ensureStoryConsistency, modifyStory, createCharacterImagePrompt, createImagePromptForShot, generateImage } from './services/geminiService';
 
@@ -67,6 +68,7 @@ export const App: React.FC = () => {
   const [soundtrackPrompt, setSoundtrackPrompt] = useState('');
   const [references, setReferences] = useState<Reference[]>([]);
   const [narrativeArc, setNarrativeArc] = useState<ArcPoint[]>([]);
+  const [authors, setAuthors] = useState<Author[]>([]);
   
   const [characters, setCharacters] = useState<Character[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -147,6 +149,7 @@ export const App: React.FC = () => {
       soundtrackPrompt,
       references,
       narrativeArc,
+      authors,
       episodes,
       characters
   });
@@ -163,6 +166,7 @@ export const App: React.FC = () => {
       setSoundtrackPrompt(state.soundtrackPrompt || '');
       setReferences(state.references || []);
       setNarrativeArc(state.narrativeArc || []);
+      setAuthors(state.authors || []);
       setEpisodes(state.episodes || []);
       setCharacters(state.characters || []);
       
@@ -241,6 +245,7 @@ export const App: React.FC = () => {
           setSoundtrackPrompt('');
           setReferences([]);
           setNarrativeArc([]);
+          setAuthors([]);
           setCharacters([]);
           setEpisodes([]);
           
@@ -373,6 +378,7 @@ export const App: React.FC = () => {
       { id: 'storyboard', icon: FilmIcon, label: t('storyBoardTab') },
       { id: 'video', icon: VideoIcon, label: t('videoGeneratorTab') },
       { id: 'utilities', icon: ChartBarIcon, label: t('utilitiesTitle') },
+      { id: 'authors', icon: UsersIcon, label: t('authorsTitle') },
   ];
 
   return (
@@ -514,6 +520,7 @@ export const App: React.FC = () => {
                                         soundtrackPrompt: preview.soundtrackPrompt,
                                         narrativeArc: preview.narrativeArc,
                                         references: preview.references,
+                                        authors: authors,
                                         characters: preview.characters.map((c, i) => ({ ...c, id: generateId() + i, images: [] })),
                                         episodes: preview.episodes.map((ep, i) => ({
                                             ...ep,
@@ -693,6 +700,14 @@ export const App: React.FC = () => {
                                 regenerationProgress={regenProgress}
                                 onStartRegeneration={handleStartRegeneration}
                                 onStopRegeneration={handleStopRegeneration}
+                            />
+                        )}
+
+                        {workflowPhase === 'authors' && (
+                            <ProjectAuthors
+                                key={resetKey}
+                                authors={authors}
+                                setAuthors={setAuthors}
                             />
                         )}
                     </div>

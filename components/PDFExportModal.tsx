@@ -10,6 +10,9 @@ export interface PDFExportOptions {
     includeAllEpisodes: boolean;
     includePrompts: boolean;
     includeMetadata: boolean;
+    includeReferences: boolean;
+    includeNarrativeArc: boolean;
+    includeTechDetails: boolean;
     layout: 'standard' | 'compact'; // Compact = 2 columns, smaller images
 }
 
@@ -28,6 +31,9 @@ export const PDFExportModal: React.FC<PDFExportModalProps> = ({ onExport, onClos
         includeAllEpisodes: true,
         includePrompts: false,
         includeMetadata: true,
+        includeReferences: true,
+        includeNarrativeArc: true,
+        includeTechDetails: true,
         layout: 'compact', 
     });
 
@@ -38,7 +44,7 @@ export const PDFExportModal: React.FC<PDFExportModalProps> = ({ onExport, onClos
 
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-            <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-gray-700 flex flex-col">
+            <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-gray-700 flex flex-col max-h-[90vh]">
                 <div className="flex justify-between items-center p-4 border-b border-gray-700">
                     <h3 className="text-lg font-bold text-white">{t('exportToPDF')}</h3>
                     <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-700">
@@ -46,7 +52,7 @@ export const PDFExportModal: React.FC<PDFExportModalProps> = ({ onExport, onClos
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-6 overflow-y-auto">
                     <div className="space-y-3">
                         <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Include Content</h4>
                         
@@ -99,7 +105,7 @@ export const PDFExportModal: React.FC<PDFExportModalProps> = ({ onExport, onClos
                                 onChange={() => handleToggle('includePrompts')} 
                                 className="rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500 h-5 w-5"
                             />
-                            <span className="text-gray-200">Include Image Prompts</span>
+                            <span className="text-gray-200">Include AI Prompts</span>
                         </label>
 
                         <label className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-700/50 rounded">
@@ -110,6 +116,36 @@ export const PDFExportModal: React.FC<PDFExportModalProps> = ({ onExport, onClos
                                 className="rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500 h-5 w-5"
                             />
                             <span className="text-gray-200">Include Project Parameters</span>
+                        </label>
+
+                        <label className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-700/50 rounded">
+                            <input 
+                                type="checkbox" 
+                                checked={options.includeReferences} 
+                                onChange={() => handleToggle('includeReferences')} 
+                                className="rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500 h-5 w-5"
+                            />
+                            <span className="text-gray-200">{t('includeReferences')}</span>
+                        </label>
+
+                        <label className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-700/50 rounded">
+                            <input 
+                                type="checkbox" 
+                                checked={options.includeNarrativeArc} 
+                                onChange={() => handleToggle('includeNarrativeArc')} 
+                                className="rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500 h-5 w-5"
+                            />
+                            <span className="text-gray-200">{t('includeNarrativeArc')}</span>
+                        </label>
+
+                        <label className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-700/50 rounded">
+                            <input 
+                                type="checkbox" 
+                                checked={options.includeTechDetails} 
+                                onChange={() => handleToggle('includeTechDetails')} 
+                                className="rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500 h-5 w-5"
+                            />
+                            <span className="text-gray-200">{t('includeTechDetails')}</span>
                         </label>
                     </div>
 

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../contexts/languageContext';
-import { ChartBarIcon, RefreshCwIcon, WandIcon, DownloadIcon, UploadIcon, FloppyDiskIcon } from './icons';
+import { ChartBarIcon, RefreshCwIcon, WandIcon, DownloadIcon, UploadIcon, FloppyDiskIcon, VideoIcon, BookOpenIcon } from './icons';
 import { LoadingSpinner } from './LoadingSpinner';
 import type { Episode, Character, StoryboardStyle, ProjectState } from '../types';
 import { createCharacterImagePrompt, createImagePromptForShot, generateImage } from '../services/geminiService';
@@ -16,10 +16,12 @@ interface UtilitiesProps {
     aspectRatio: string;
     onGetProjectState: () => ProjectState;
     onImportProject: (state: ProjectState) => void;
+    onExportPDF: () => void;
+    onExportAnimatic: () => void;
 }
 
 export const Utilities: React.FC<UtilitiesProps> = ({ 
-    episodes, characters, setEpisodes, setCharacters, storyboardStyle, aspectRatio, onGetProjectState, onImportProject 
+    episodes, characters, setEpisodes, setCharacters, storyboardStyle, aspectRatio, onGetProjectState, onImportProject, onExportPDF, onExportAnimatic
 }) => {
     const { t } = useLanguage();
     const [tokenCount, setTokenCount] = useState(0);
@@ -396,7 +398,25 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                     
                     {/* Export Column */}
                     <div className="space-y-4 border-r border-gray-700 pr-8">
-                        <h4 className="font-semibold text-gray-300 text-sm uppercase">Export</h4>
+                        <h4 className="font-semibold text-gray-300 text-sm uppercase">Export Media</h4>
+                        <button 
+                            onClick={onExportPDF}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-900/30 hover:bg-red-900/50 border border-red-900/50 text-red-100 rounded-md font-medium transition-colors"
+                        >
+                            <BookOpenIcon className="w-5 h-5" />
+                            {t('exportToPDF')}
+                        </button>
+                        <button 
+                            onClick={onExportAnimatic}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-900/50 text-purple-100 rounded-md font-medium transition-colors"
+                        >
+                            <VideoIcon className="w-5 h-5" />
+                            {t('exportAnimatic')}
+                        </button>
+
+                        <div className="border-t border-gray-700 my-2"></div>
+                        
+                        <h4 className="font-semibold text-gray-300 text-sm uppercase">Export Data</h4>
                         <button 
                             onClick={handleExportJSON}
                             disabled={isExporting}

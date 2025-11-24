@@ -15,7 +15,6 @@ import { VideoGenerator } from './components/VideoGenerator';
 import { Utilities } from './components/Utilities';
 import { EpisodeList } from './components/EpisodeList';
 import { LanguageSelector } from './components/LanguageSelector';
-import { FrameIOExportModal } from './components/FrameIOExportModal';
 import { PDFExportModal } from './components/PDFExportModal';
 import { AnimaticExportModal } from './components/AnimaticExportModal';
 import { ModificationModal } from './components/ModificationModal';
@@ -24,7 +23,7 @@ import { ModificationPreviewModal } from './components/ModificationPreviewModal'
 import { 
     LayoutGridIcon, FilmIcon, UserIcon, BookOpenIcon, VideoIcon, ChartBarIcon, 
     ActivityIcon, FloppyDiskIcon, FolderOpenIcon, TrashIcon, PlusIcon, 
-    DownloadIcon, ShareIcon 
+    ChevronLeftIcon, ChevronRightIcon 
 } from './components/icons';
 import { ensureStoryConsistency, modifyStory } from './services/geminiService';
 
@@ -71,14 +70,13 @@ export const App: React.FC = () => {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   
   const [activeEpisodeId, setActiveEpisodeId] = useState<number | null>(null);
-  const [workflowPhase, setWorkflowPhase] = useState('bible'); // Default start
+  const [workflowPhase, setWorkflowPhase] = useState('generator'); // Default start
   const [bibleTab, setBibleTab] = useState<'general' | 'characters' | 'style'>('general');
 
   // Custom Styles
   const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
 
   // Modals & Menus
-  const [showFrameIOModal, setShowFrameIOModal] = useState(false);
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [showAnimaticModal, setShowAnimaticModal] = useState(false);
   const [showModificationModal, setShowModificationModal] = useState(false);
@@ -86,7 +84,9 @@ export const App: React.FC = () => {
   const [showModificationPreview, setShowModificationPreview] = useState(false);
   const [modificationPreviewData, setModificationPreviewData] = useState<{explanation: string, state: ProjectState} | null>(null);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
+  
+  // Layout State
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Project Management
   const [projectsList, setProjectsList] = useState<{id: number, name: string, modified: Date}[]>([]);
@@ -178,7 +178,7 @@ export const App: React.FC = () => {
           setTreatment('');
           setNarrativeArc([]);
           setReferences([]);
-          setWorkflowPhase('bible');
+          setWorkflowPhase('generator');
       }
   };
 
@@ -223,9 +223,9 @@ export const App: React.FC = () => {
   const activeEpisode = episodes.find(e => e.id === activeEpisodeId);
 
   const menuItems = [
+      { id: 'generator', icon: LayoutGridIcon, label: t('storyGeneratorTab') },
       { id: 'bible', icon: BookOpenIcon, label: t('storyBoardTab') + ' / ' + t('outlineTab') },
       { id: 'arc', icon: ActivityIcon, label: t('narrativeArcTitle') },
-      { id: 'generator', icon: LayoutGridIcon, label: t('storyGeneratorTab') },
       { id: 'episodes', icon: FolderOpenIcon, label: t('episodes') },
       { id: 'organizer', icon: LayoutGridIcon, label: t('visualOrganizerTitle') },
       { id: 'storyboard', icon: FilmIcon, label: t('storyBoardTab') },
@@ -238,81 +238,70 @@ export const App: React.FC = () => {
         <div className="flex h-screen bg-gray-900 text-white font-sans overflow-hidden">
             
             {/* SIDEBAR */}
-            <aside className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col flex-shrink-0 transition-all duration-300">
-                <div className="h-16 flex items-center px-6 border-b border-gray-700">
-                    <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">
-                        Storyboard AI
-                    </span>
+            <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-gray-800 border-r border-gray-700 flex flex-col flex-shrink-0 transition-all duration-300 z-30 relative`}>
+                {/* Header / Toggle */}
+                <div className="h-16 flex items-center px-4 border-b border-gray-700 justify-between">
+                    {!isSidebarCollapsed && (
+                        <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400 truncate">
+                            Storyboard AI
+                        </span>
+                    )}
+                    <button 
+                        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+                        className={`p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-white ${isSidebarCollapsed ? 'mx-auto' : ''}`}
+                    >
+                        {isSidebarCollapsed ? <ChevronRightIcon className="w-5 h-5"/> : <ChevronLeftIcon className="w-5 h-5"/>}
+                    </button>
                 </div>
 
-                <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-                    {menuItems.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => setWorkflowPhase(item.id)}
-                            className={`w-full flex items-center px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                                workflowPhase === item.id 
-                                ? 'bg-indigo-600 text-white shadow-md' 
-                                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                            }`}
-                        >
-                            <item.icon className={`w-5 h-5 mr-3 ${workflowPhase === item.id ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`} />
-                            {item.label}
-                        </button>
-                    ))}
-                </nav>
+                <div className="flex-1 overflow-y-auto overflow-x-visible py-4 flex flex-col gap-1">
+                    {/* Navigation */}
+                    <nav className="px-3 space-y-1">
+                        {menuItems.map(item => (
+                            <button
+                                key={item.id}
+                                onClick={() => setWorkflowPhase(item.id)}
+                                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2.5 rounded-md text-sm font-medium transition-colors group relative ${
+                                    workflowPhase === item.id 
+                                    ? 'bg-indigo-600 text-white shadow-md' 
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                                }`}
+                                title={isSidebarCollapsed ? item.label : undefined}
+                            >
+                                <item.icon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''} ${workflowPhase === item.id ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`} />
+                                {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
+                            </button>
+                        ))}
+                    </nav>
 
-                <div className="p-4 border-t border-gray-700">
-                    <div className="text-xs text-gray-500 text-center">
-                        v1.5.0 Studio Edition
-                    </div>
-                </div>
-            </aside>
+                    <div className="my-2 border-t border-gray-700 mx-4"></div>
 
-            {/* MAIN WRAPPER */}
-            <div className="flex-1 flex flex-col min-w-0">
-                
-                {/* TOP HEADER */}
-                <header className="h-16 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-20">
-                    {/* Left: Title */}
-                    <div className="flex items-center gap-4">
-                        <div className="hidden md:block w-px h-6 bg-gray-600 mx-2"></div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">{t('project')}</label>
-                            <input 
-                                type="text" 
-                                value={seriesTitle}
-                                onChange={(e) => setSeriesTitle(e.target.value)}
-                                className="bg-transparent border-none text-sm font-bold text-white focus:ring-0 placeholder-gray-500 p-0 w-64"
-                                placeholder={t('untitledProject')}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Right: Actions Toolbar */}
-                    <div className="flex items-center gap-2">
+                    {/* Project Actions */}
+                    <div className="px-3 space-y-1">
+                        {!isSidebarCollapsed && <div className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 mt-2">{t('project')}</div>}
                         
-                        {/* New Project */}
-                        <button onClick={handleNewProject} className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors" title={t('newProject')}>
-                            <PlusIcon className="w-5 h-5" />
+                        <button onClick={handleNewProject} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors`} title={t('newProject')}>
+                            <PlusIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
+                            {!isSidebarCollapsed && t('newProject')}
                         </button>
 
-                        {/* Save Project */}
-                        <button onClick={handleSaveProject} className="p-2 text-gray-400 hover:text-indigo-400 hover:bg-gray-700 rounded transition-colors" title={t('saveProject')}>
-                            <FloppyDiskIcon className="w-5 h-5" />
+                        <button onClick={handleSaveProject} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`} title={t('saveProject')}>
+                            <FloppyDiskIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
+                            {!isSidebarCollapsed && t('saveProject')}
                         </button>
-                        
-                        {/* Load Project */}
-                        <div className="relative">
-                            <button onClick={() => setShowProjectList(!showProjectList)} className="p-2 text-gray-400 hover:text-indigo-400 hover:bg-gray-700 rounded transition-colors" title={t('loadProject')}>
-                                <FolderOpenIcon className="w-5 h-5" />
+
+                        {/* Load Project with Side Popout */}
+                        <div className="relative group">
+                            <button onClick={() => setShowProjectList(!showProjectList)} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`} title={t('loadProject')}>
+                                <FolderOpenIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
+                                {!isSidebarCollapsed && t('loadProject')}
                             </button>
                             
-                            {/* Project List Dropdown */}
                             {showProjectList && (
-                                <div className="absolute right-0 top-full mt-2 w-64 bg-gray-800 border border-gray-700 rounded-md shadow-xl overflow-hidden z-50 animate-fade-in">
-                                    <div className="p-2 border-b border-gray-700 bg-gray-900/50">
+                                <div className={`absolute ${isSidebarCollapsed ? 'left-full top-0 ml-2' : 'top-full left-0 mt-1 w-full'} w-64 bg-gray-800 border border-gray-700 rounded-md shadow-xl overflow-hidden z-50 animate-fade-in`}>
+                                    <div className="p-2 border-b border-gray-700 bg-gray-900/50 flex justify-between items-center">
                                         <span className="text-xs font-bold uppercase text-gray-500 px-2">{t('loadProject')}</span>
+                                        <button onClick={() => setShowProjectList(false)} className="text-gray-500 hover:text-white p-1"><ChevronLeftIcon className="w-3 h-3"/></button>
                                     </div>
                                     <div className="max-h-64 overflow-y-auto">
                                         {projectsList.map(p => (
@@ -331,32 +320,36 @@ export const App: React.FC = () => {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </div>
 
-                        <div className="h-6 w-px bg-gray-600 mx-2"></div>
-
-                        {/* Export Menu */}
-                        <div className="relative">
-                            <button onClick={() => setShowExportMenu(!showExportMenu)} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-sm font-medium transition-colors" title={t('exportMenu')}>
-                                <ShareIcon className="w-4 h-4" />
-                                <span className="hidden lg:inline">{t('exportMenu')}</span>
-                            </button>
-                            {showExportMenu && (
-                                <div className="absolute right-0 top-full mt-2 w-56 bg-gray-800 border border-gray-700 rounded-md shadow-xl z-50 py-1 animate-fade-in">
-                                    <button onClick={() => { setShowPDFModal(true); setShowExportMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border-b border-gray-700/50">
-                                        <DownloadIcon className="w-4 h-4 mr-3 text-red-400" /> {t('exportToPDF')}
-                                    </button>
-                                    <button onClick={() => { setShowAnimaticModal(true); setShowExportMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border-b border-gray-700/50">
-                                        <VideoIcon className="w-4 h-4 mr-3 text-purple-400" /> {t('exportAnimatic')}
-                                    </button>
-                                    <button onClick={() => { setShowFrameIOModal(true); setShowExportMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors">
-                                        <ShareIcon className="w-4 h-4 mr-3 text-blue-400" /> {t('shareOnFrameIO')}
-                                    </button>
-                                </div>
-                            )}
+                <div className="p-4 border-t border-gray-700">
+                    <LanguageSelector collapsed={isSidebarCollapsed} />
+                    {!isSidebarCollapsed && (
+                        <div className="text-xs text-gray-500 text-center mt-4">
+                            v1.6.0 Studio Edition
                         </div>
+                    )}
+                </div>
+            </aside>
 
-                        <div className="h-6 w-px bg-gray-600 mx-2"></div>
-                        <LanguageSelector />
+            {/* MAIN WRAPPER */}
+            <div className="flex-1 flex flex-col min-w-0">
+                
+                {/* TOP HEADER */}
+                <header className="h-16 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-20">
+                    {/* Left: Title */}
+                    <div className="flex items-center gap-4 w-full justify-center md:justify-start">
+                        <div className="flex flex-col w-full max-w-md">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">{t('project')}</label>
+                            <input 
+                                type="text" 
+                                value={seriesTitle}
+                                onChange={(e) => setSeriesTitle(e.target.value)}
+                                className="bg-transparent border-none text-lg font-bold text-white focus:ring-0 placeholder-gray-500 p-0 w-full"
+                                placeholder={t('untitledProject')}
+                            />
+                        </div>
                     </div>
                 </header>
 
@@ -541,6 +534,8 @@ export const App: React.FC = () => {
                                 aspectRatio={aspectRatio}
                                 onGetProjectState={gatherState}
                                 onImportProject={applyState}
+                                onExportPDF={() => setShowPDFModal(true)}
+                                onExportAnimatic={() => setShowAnimaticModal(true)}
                             />
                         )}
                     </div>
@@ -580,15 +575,6 @@ export const App: React.FC = () => {
                         aspectRatio={aspectRatio}
                         storyTitle={seriesTitle}
                         onClose={() => setShowAnimaticModal(false)}
-                    />
-                )}
-
-                {showFrameIOModal && (
-                    <FrameIOExportModal
-                        scenes={activeEpisode ? activeEpisode.scenes : episodes.flatMap(e => e.scenes)}
-                        aspectRatio={aspectRatio}
-                        storyTitle={seriesTitle}
-                        onClose={() => setShowFrameIOModal(false)}
                     />
                 )}
 

@@ -43,7 +43,7 @@ export const ModificationPreviewModal: React.FC<ModificationPreviewModalProps> =
                     {/* Stats */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-indigo-900/20 border border-indigo-800 p-3 rounded-md text-center">
-                            <span className="block text-2xl font-bold text-indigo-400">{proposedState.scenes.length}</span>
+                            <span className="block text-2xl font-bold text-indigo-400">{proposedState.episodes.reduce((acc, ep) => acc + ep.scenes.length, 0)}</span>
                             <span className="text-xs text-indigo-300 uppercase tracking-wide">{t('modifiedScenesCount')}</span>
                         </div>
                         <div className="bg-purple-900/20 border border-purple-800 p-3 rounded-md text-center">

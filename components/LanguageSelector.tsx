@@ -4,7 +4,11 @@ import { useLanguage } from '../contexts/languageContext';
 import { GlobeIcon, ChevronDownIcon } from './icons';
 import { Language } from '../lib/translations';
 
-export const LanguageSelector: React.FC = () => {
+interface LanguageSelectorProps {
+    collapsed?: boolean;
+}
+
+export const LanguageSelector: React.FC<LanguageSelectorProps> = ({ collapsed }) => {
     const { language, setLanguage } = useLanguage();
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -27,19 +31,25 @@ export const LanguageSelector: React.FC = () => {
     };
 
     return (
-        <div className="relative" ref={wrapperRef}>
+        <div className="relative w-full" ref={wrapperRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center space-x-2 px-3 py-2 text-sm rounded-md transition-colors bg-gray-700/50 hover:bg-gray-700 border border-gray-600"
+                className={`flex items-center ${collapsed ? 'justify-center w-full' : 'space-x-2 px-3'} py-2 text-sm rounded-md transition-colors hover:bg-gray-700 text-gray-300 w-full`}
                 aria-haspopup="true"
                 aria-expanded={isOpen}
+                title={collapsed ? language.toUpperCase() : undefined}
             >
-                <GlobeIcon className="h-4 w-4 text-gray-400" />
-                <span>{language.toUpperCase()}</span>
-                <ChevronDownIcon className={`w-4 h-4 text-gray-400 transform transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                <GlobeIcon className="h-5 w-5 text-gray-400" />
+                {!collapsed && (
+                    <>
+                        <span className="flex-1 text-left">{language.toUpperCase()}</span>
+                        <ChevronDownIcon className={`w-4 h-4 text-gray-400 transform transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    </>
+                )}
             </button>
+            
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-50 py-1" role="menu">
+                <div className={`absolute ${collapsed ? 'left-full top-0 ml-2' : 'bottom-full left-0 mb-2 w-full'} w-32 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-50 py-1`} role="menu">
                     <ul>
                         <li role="none">
                             <button

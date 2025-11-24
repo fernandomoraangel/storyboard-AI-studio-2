@@ -1,17 +1,5 @@
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 export type Language = 'en' | 'es';
 
 export type Options = {
@@ -870,7 +858,7 @@ export const translations: Record<Language, Translations> = {
     chatPromptNewCharacterWithTopic: "Sugiere una escena con un nuevo personaje, relacionado con: \"{topic}\"",
     chatPromptExistingCharacter: "Sugiere una escena con el personaje {name}.",
     chatPromptExistingCharacterWithTopic: "Sugiere una escena con el personaje {name}, relacionado con: \"{topic}\"",
-    chatSceneCreatedNoImage: "He creado la escena '{title}', pero no pude generar su imagen debido a límites de la API. Puedes generarla manualmente desde la tarjeta de la escena.",
+    chatSceneCreatedNoImage: "He creado la escena '{title}', but no pude generar su imagen debido a límites de la API. Puedes generarla manualmente desde la tarjeta de la escena.",
     chatVisualFailedQuota: "Lo siento, no pude generar el visual para {name} ahora mismo debido a límites de la API. Por favor intenta en un momento.",
 
     noCharactersYet: "No hay personajes aún. ¡Haz clic en \"Añadir Personaje\" para comenzar a crear tu elenco!",

@@ -1,1011 +1,658 @@
 
-
-
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Storyboard } from './components/Storyboard';
-import { ChatWidget } from './components/ChatWidget';
-import { SeriesBible } from './components/SeriesBible';
-import { EpisodeList } from './components/EpisodeList';
-import { CharacterDesigner } from './components/CharacterDesigner';
-import { StoryGenerator } from './components/StoryGenerator';
-import { NarrativeArcEditor } from './components/NarrativeArcEditor';
-import { VisualOrganizer } from './components/VisualOrganizer';
-import { Utilities } from './components/Utilities';
-import type { Scene, Character, Reference, Shot, StoryboardStyle, ProjectMeta, CustomStyle, CustomStyleImage, Episode, ProjectState, ArcPoint } from './types';
-import { FilmIcon, PlusIcon, DownloadIcon, UserIcon, BookOpenIcon, TrashIcon, FloppyDiskIcon, FolderOpenIcon, ShareIcon, WandIcon, VideoIcon, CheckCircleIcon, RowsIcon, ActivityIcon, LayoutGridIcon, ChartBarIcon } from './components/icons';
-import { createImagePromptForShot, generateImage, generateSynopsis, createCharacterImagePrompt, ensureStoryConsistency, modifyStory } from './services/geminiService';
-import { exportStoryboardToPDF } from './services/pdfService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { LanguageContext, LanguageContextType } from './contexts/languageContext';
 import { translations, Language } from './lib/translations';
-import { LanguageSelector } from './components/LanguageSelector';
-import { LoadingSpinner } from './components/LoadingSpinner';
-import { saveProject, getProjectsList, getProject, deleteProject, getCustomStyles, saveCustomStyle, deleteCustomStyle } from './lib/db';
-import { FrameIOExportModal } from './components/FrameIOExportModal';
-import { AnimaticExportModal } from './components/AnimaticExportModal';
-import { ModificationModal, ModificationSettings } from './components/ModificationModal';
-import { ModificationPreviewModal } from './components/ModificationPreviewModal';
-import { ConsistencyModal, ConsistencySettings } from './components/ConsistencyModal';
-import { LanguageContext } from './contexts/languageContext';
+import { Episode, Character, Scene, Shot, StoryboardStyle, ProjectState, Reference, ArcPoint, CustomStyle } from './types';
+import { saveProject, getProjectsList, getProject, deleteProject, saveCustomStyle, getCustomStyles, deleteCustomStyle, Project } from './lib/db';
+
+// Components
+import { Storyboard } from './components/Storyboard';
+import { SeriesBible } from './components/SeriesBible';
+import { StoryGenerator } from './components/StoryGenerator';
+import { VisualOrganizer } from './components/VisualOrganizer';
+import { NarrativeArcEditor } from './components/NarrativeArcEditor';
 import { VideoGenerator } from './components/VideoGenerator';
-import { PDFExportModal, PDFExportOptions } from './components/PDFExportModal';
+import { Utilities } from './components/Utilities';
+import { EpisodeList } from './components/EpisodeList';
+import { LanguageSelector } from './components/LanguageSelector';
+import { FrameIOExportModal } from './components/FrameIOExportModal';
+import { PDFExportModal } from './components/PDFExportModal';
+import { AnimaticExportModal } from './components/AnimaticExportModal';
+import { ModificationModal } from './components/ModificationModal';
+import { ConsistencyModal } from './components/ConsistencyModal';
+import { ModificationPreviewModal } from './components/ModificationPreviewModal';
+import { 
+    LayoutGridIcon, FilmIcon, UserIcon, BookOpenIcon, VideoIcon, ChartBarIcon, 
+    ActivityIcon, FloppyDiskIcon, FolderOpenIcon, TrashIcon, PlusIcon, 
+    DownloadIcon, ShareIcon 
+} from './components/icons';
+import { ensureStoryConsistency, modifyStory } from './services/geminiService';
 
-type WorkflowPhase = 'bible' | 'arc' | 'organizer' | 'episodes' | 'storyboard' | 'generator' | 'export' | 'utilities';
-
-type GenerationJob = {
-    type: 'character' | 'shot';
-    id: number;
-    parentId?: number; 
-    name: string;
-    prompt: string;
-};
-
-const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = (reader.result as string).split(',')[1];
-      resolve(base64String);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
+// Basic ID generator
+const generateId = () => Date.now() + Math.random();
 
 export const App: React.FC = () => {
-  const [language, setLanguage] = useState<Language>('es');
-  
-  const t = useCallback((key: keyof typeof translations.en, replacements?: { [key: string]: string | number }): string => {
-    const translationValue = translations[language][key] || translations.en[key];
-    if (typeof translationValue !== 'string') return '';
-    let translation = translationValue as string;
+  // Language State
+  const [language, setLanguage] = useState<Language>('en');
+
+  const t = useCallback((key: keyof typeof translations.en, replacements?: { [key: string]: string | number }) => {
+    let text = translations[language][key] || translations['en'][key] || key;
     if (replacements) {
-      Object.entries(replacements).forEach(([placeholder, value]) => {
-        const regex = new RegExp(`{${placeholder}}`, 'g');
-        translation = translation.replace(regex, String(value));
-      });
+        Object.entries(replacements).forEach(([k, v]) => {
+            text = text.replace(`{${k}}`, String(v));
+        });
     }
-    return translation;
+    return text;
   }, [language]);
 
-  const options = translations[language].options;
+  const languageContextValue: LanguageContextType = {
+    language,
+    setLanguage,
+    t,
+    options: translations[language].options
+  };
 
-  // Series Data
-  const [seriesTitle, setSeriesTitle] = useState<string>('');
-  const [authorName, setAuthorName] = useState<string>('');
+  // Project State
+  const [currentProjectId, setCurrentProjectId] = useState<number | undefined>(undefined);
+  const [seriesTitle, setSeriesTitle] = useState('Untitled Project');
+  const [authorName, setAuthorName] = useState('');
   const [storyboardStyle, setStoryboardStyle] = useState<StoryboardStyle>('Cinematic');
-  const [aspectRatio, setAspectRatio] = useState<string>('16:9');
+  const [aspectRatio, setAspectRatio] = useState('16:9');
   
-  // Bible Data
-  const [logline, setLogline] = useState<string>('');
-  const [structuralAnalysis, setStructuralAnalysis] = useState<string>('');
-  const [treatment, setTreatment] = useState<string>('');
-  const [subplots, setSubplots] = useState<string>('');
-  const [soundtrackPrompt, setSoundtrackPrompt] = useState<string>('');
+  const [logline, setLogline] = useState('');
+  const [treatment, setTreatment] = useState('');
+  const [structuralAnalysis, setStructuralAnalysis] = useState('');
+  const [subplots, setSubplots] = useState('');
+  const [soundtrackPrompt, setSoundtrackPrompt] = useState('');
   const [references, setReferences] = useState<Reference[]>([]);
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [bibleTab, setBibleTab] = useState<'general' | 'characters' | 'style'>('general');
   const [narrativeArc, setNarrativeArc] = useState<ArcPoint[]>([]);
   
-  // Episode Data
+  const [characters, setCharacters] = useState<Character[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  
   const [activeEpisodeId, setActiveEpisodeId] = useState<number | null>(null);
+  const [workflowPhase, setWorkflowPhase] = useState('bible'); // Default start
+  const [bibleTab, setBibleTab] = useState<'general' | 'characters' | 'style'>('general');
 
-  // Workflow State
-  const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase>('bible');
-  const [selectedCustomStyleId, setSelectedCustomStyleId] = useState<number | null>(null);
-
-  // Modals & Generators
-  const [showMassGenConfirmModal, setShowMassGenConfirmModal] = useState<GenerationJob[] | null>(null);
-  const [isMassGenerating, setIsMassGenerating] = useState(false);
-  const [massGenProgress, setMassGenProgress] = useState({ current: 0, total: 0 });
-  const [generationReport, setGenerationReport] = useState<{ successes: string[]; failures: { name: string; error: string }[] } | null>(null);
-
-  const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const lastSavedState = useRef<string | null>(null);
-  
-  const [projects, setProjects] = useState<ProjectMeta[]>([]);
-  const [showLoadModal, setShowLoadModal] = useState(false);
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{ type: string; payload?: any } | null>(null);
-
-  const [showFrameIOModal, setShowFrameIOModal] = useState(false);
-  const [showAnimaticModal, setShowAnimaticModal] = useState(false);
-  const [showPDFModal, setShowPDFModal] = useState(false);
-  
-  // Co-Creation
-  const [isCoCreating, setIsCoCreating] = useState(false);
-  const [coCreationStatus, setCoCreationStatus] = useState<'loading' | 'success' | 'error' | null>(null);
-  const [showConsistencyModal, setShowConsistencyModal] = useState(false);
-  const [lastConsistencySettings, setLastConsistencySettings] = useState<ConsistencySettings | undefined>(undefined);
-  const [showNoChangesModal, setShowNoChangesModal] = useState(false);
-  const [showModificationModal, setShowModificationModal] = useState(false);
-  const [isModifying, setIsModifying] = useState(false);
-  const [lastModificationSettings, setLastModificationSettings] = useState<ModificationSettings | undefined>(undefined);
-  const [pendingModification, setPendingModification] = useState<{ state: ProjectState; explanation: string } | null>(null);
-
-  // State helper
-  const gatherState = useCallback((): ProjectState => ({
-      seriesTitle, authorName, storyboardStyle, aspectRatio, soundtrackPrompt, logline,
-      structuralAnalysis, treatment, references, episodes, characters, subplots, narrativeArc
-  }), [
-      seriesTitle, authorName, storyboardStyle, aspectRatio, soundtrackPrompt, logline,
-      structuralAnalysis, treatment, references, episodes, characters, subplots, narrativeArc
-  ]);
-
-  // Apply State
-  const applyState = (state: ProjectState | null) => {
-      setSeriesTitle(state?.seriesTitle || '');
-      setAuthorName(state?.authorName || '');
-      setStoryboardStyle(state?.storyboardStyle || 'Cinematic');
-      setAspectRatio(state?.aspectRatio || '16:9');
-      setSelectedCustomStyleId(null);
-      setSoundtrackPrompt(state?.soundtrackPrompt || '');
-      setLogline(state?.logline || '');
-      setSubplots(state?.subplots || '');
-      setStructuralAnalysis(state?.structuralAnalysis || '');
-      setTreatment(state?.treatment || '');
-      setReferences(state?.references || []);
-      setCharacters(state?.characters || []);
-      setNarrativeArc(state?.narrativeArc || []);
-      
-      // Handle legacy 'scenes' migration if necessary, otherwise use 'episodes'
-      if (state && 'scenes' in state && (!state.episodes || state.episodes.length === 0)) {
-          // Migrate old single-story project to Episode 1
-          const legacyScenes = (state as any).scenes as Scene[];
-          if (legacyScenes.length > 0) {
-             setEpisodes([{
-                 id: Date.now(),
-                 title: 'Episode 1',
-                 synopsis: 'Imported from legacy project',
-                 scenes: legacyScenes
-             }]);
-             setActiveEpisodeId(null); // Force user to select
-          } else {
-             setEpisodes([]);
-          }
-      } else {
-          setEpisodes(state?.episodes || []);
-      }
-  };
-
-  useEffect(() => {
-      const currentState = JSON.stringify(gatherState());
-      if (lastSavedState.current !== null && currentState !== lastSavedState.current) {
-          setIsDirty(true);
-      }
-  }, [gatherState]);
-
-  useEffect(() => {
-    const initialState = JSON.stringify(gatherState());
-    lastSavedState.current = initialState;
-  }, []);
-
-  // Auto-select first episode if none selected
-  useEffect(() => {
-      if (activeEpisodeId === null && episodes.length > 0) {
-          setActiveEpisodeId(episodes[0].id);
-      }
-  }, [episodes, activeEpisodeId]);
-
-  // Episode Management Helpers
-  const getCurrentEpisode = () => episodes.find(e => e.id === activeEpisodeId);
-  
-  const addEpisode = () => {
-      const newEp: Episode = {
-          id: Date.now(),
-          title: `Episode ${episodes.length + 1}`,
-          synopsis: '',
-          scenes: []
-      };
-      setEpisodes(prev => [...prev, newEp]);
-      setActiveEpisodeId(newEp.id);
-      setWorkflowPhase('episodes');
-  };
-
-  const updateEpisode = (id: number, data: Partial<Episode>) => {
-      setEpisodes(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
-  };
-
-  const deleteEpisode = (id: number) => {
-      if(window.confirm(t('confirmDeleteProject'))) { // reusing translation
-          setEpisodes(prev => prev.filter(e => e.id !== id));
-          if (activeEpisodeId === id) setActiveEpisodeId(null);
-      }
-  };
-
-  const handleSceneUpdate = (updatedScenes: Scene[]) => {
-      if (activeEpisodeId === null) return;
-      setEpisodes(prev => prev.map(ep => ep.id === activeEpisodeId ? { ...ep, scenes: updatedScenes } : ep));
-  };
-
-  // --- Scene/Shot Helpers using handleSceneUpdate ---
-  const activeScenes: Scene[] = getCurrentEpisode()?.scenes || [];
-  
-  const addScene = (sceneData?: Partial<Scene>): Scene => {
-    if (activeEpisodeId === null) return {} as Scene;
-    const newId = Date.now();
-    const newShot: Shot = { id: Date.now() + 1, description: '', imageUrl: null, videoUrl: null, shotType: '', cameraMovement: '', cameraType: '', lensType: '', lensBlur: '', atmosphere: '', lighting: '', style: '', technicalNotes: '', colorGrade: '', filmGrain: '', filmStock: '', duration: 5, soundFx: '', notes: '' };
-    const fullNewScene: Scene = { id: newId, title: sceneData?.title || `${t('scene')} ${activeScenes.length + 1}`, characters: sceneData?.characters || '', setting: sceneData?.setting || '', location: sceneData?.location || '', dialogueType: sceneData?.dialogueType || 'dialogue', dialogue: sceneData?.dialogue || '', musicPrompt: sceneData?.musicPrompt || '', keyObjects: sceneData?.keyObjects || '', actions: sceneData?.actions || '', tone: sceneData?.tone || '', notes: sceneData?.notes || '', shots: sceneData?.shots || [newShot], transitionType: options.transitionTypeOptions[0] };
-    
-    handleSceneUpdate([...activeScenes, fullNewScene]);
-    return fullNewScene;
-  };
-  
-  const updateSceneDetails = (sceneId: number, details: Partial<Scene>) => {
-      handleSceneUpdate(activeScenes.map(s => s.id === sceneId ? { ...s, ...details } : s));
-  };
-
-  const deleteScene = (sceneId: number) => {
-      handleSceneUpdate(activeScenes.filter(s => s.id !== sceneId));
-  };
-
-  const addShot = (sceneId: number) => {
-      handleSceneUpdate(activeScenes.map(s => s.id === sceneId ? { ...s, shots: [...s.shots, { id: Date.now(), description: '', imageUrl: null, videoUrl: null, shotType: '', cameraMovement: '', cameraType: '', lensType: '', lensBlur: '', atmosphere: '', lighting: '', style: '', technicalNotes: '', colorGrade: '', filmGrain: '', filmStock: '', duration: 5, soundFx: '', notes: '' }] } : s));
-  };
-
-  const updateShot = (sceneId: number, updatedShot: Shot) => {
-      handleSceneUpdate(activeScenes.map(s => s.id === sceneId ? { ...s, shots: s.shots.map(shot => shot.id === updatedShot.id ? updatedShot : shot) } : s));
-  };
-
-  const deleteShot = (sceneId: number, shotId: number) => {
-      handleSceneUpdate(activeScenes.map(s => (s.id === sceneId && s.shots.length > 1) ? { ...s, shots: s.shots.filter(shot => shot.id !== shotId) } : s));
-  };
-
-  const reorderScenes = (startIndex: number, endIndex: number) => {
-      const r = [...activeScenes];
-      const [rem] = r.splice(startIndex, 1);
-      r.splice(endIndex, 0, rem);
-      handleSceneUpdate(r);
-  };
-  
-  const reorderShots = (sceneId: number, startIndex: number, endIndex: number) => {
-       handleSceneUpdate(activeScenes.map(s => {
-           if (s.id !== sceneId) return s;
-           const nShots = Array.from(s.shots);
-           const [rem] = nShots.splice(startIndex, 1);
-           nShots.splice(endIndex, 0, rem);
-           return { ...s, shots: nShots };
-       }));
-  };
-
-  // Character Helpers
-  const updateCharacter = (updatedCharacter: Character) => setCharacters(c => c.map(char => char.id === updatedCharacter.id ? updatedCharacter : char));
-  const deleteCharacter = (characterId: number) => setCharacters(c => c.filter(char => char.id !== characterId));
-  const addCharacterFromAI = (characterData: Omit<Character, 'id' | 'images'>) => { setCharacters(p => [...p, { ...characterData, id: Date.now(), images: [] }]); };
-  const addVisualToCharacter = (characterName: string, imageUrl: string) => { setCharacters(p => p.map(c => c.name.toLowerCase() === characterName.toLowerCase() ? { ...c, images: [...c.images, imageUrl] } : c)); };
-  
-  const addCharacter = () => {
-      const newChar: Character = {
-          id: Date.now(),
-          name: t('newCharacterName'),
-          role: 'Protagonist',
-          personality: '',
-          appearance: '',
-          outfit: '',
-          behavior: '',
-          images: []
-      };
-      setCharacters(prev => [...prev, newChar]);
-  };
-
-  // Styles
+  // Custom Styles
   const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
-  const [showSaveStyleModal, setShowSaveStyleModal] = useState(false);
-  const [newStyleName, setNewStyleName] = useState('');
-  const [pendingStyleTransferData, setPendingStyleTransferData] = useState<{ referenceImages: CustomStyleImage[], referencePrompt: string } | null>(null);
 
+  // Modals & Menus
+  const [showFrameIOModal, setShowFrameIOModal] = useState(false);
+  const [showPDFModal, setShowPDFModal] = useState(false);
+  const [showAnimaticModal, setShowAnimaticModal] = useState(false);
+  const [showModificationModal, setShowModificationModal] = useState(false);
+  const [showConsistencyModal, setShowConsistencyModal] = useState(false);
+  const [showModificationPreview, setShowModificationPreview] = useState(false);
+  const [modificationPreviewData, setModificationPreviewData] = useState<{explanation: string, state: ProjectState} | null>(null);
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // Project Management
+  const [projectsList, setProjectsList] = useState<{id: number, name: string, modified: Date}[]>([]);
+  const [showProjectList, setShowProjectList] = useState(false);
+
+  // Initial Load
   useEffect(() => {
-    const loadStyles = async () => {
-        const styles = await getCustomStyles();
-        setCustomStyles(styles);
-    };
-    loadStyles();
+      loadProjectsList();
+      loadCustomStyles();
   }, []);
 
-  const handleSaveStyle = async (referenceImages: {id: number, file: File, preview: string}[], referencePrompt: string) => {
-      const customStyleImages: CustomStyleImage[] = [];
-      for (const img of referenceImages) {
-          try {
-             const base64 = await blobToBase64(img.file);
-             customStyleImages.push({ data: base64, mimeType: img.file.type });
-          } catch (e) { console.error(e); }
-      }
-      if (customStyleImages.length === 0) return;
-      setPendingStyleTransferData({ referenceImages: customStyleImages, referencePrompt });
-      setNewStyleName(`Custom Style ${customStyles.length + 1}`);
-      setShowSaveStyleModal(true);
+  const loadProjectsList = async () => {
+      const list = await getProjectsList();
+      setProjectsList(list);
   };
 
-  const confirmSaveStyle = async () => {
-      if (!pendingStyleTransferData || !newStyleName) return;
-      const newStyle: Omit<CustomStyle, 'id'> = { name: newStyleName, images: pendingStyleTransferData.referenceImages, prompt: pendingStyleTransferData.referencePrompt };
-      const id = await saveCustomStyle(newStyle);
-      setCustomStyles(prev => [...prev, { ...newStyle, id }]);
-      setShowSaveStyleModal(false);
-      setStoryboardStyle('Custom');
-      setSelectedCustomStyleId(id);
-      setPendingStyleTransferData(null);
+  const loadCustomStyles = async () => {
+      const styles = await getCustomStyles();
+      setCustomStyles(styles);
   };
 
-  const handleDeleteCustomStyle = async (id: number) => {
-    if (window.confirm(t('confirmDeleteStyle'))) {
-        await deleteCustomStyle(id);
-        setCustomStyles(await getCustomStyles());
-    }
-  };
+  const gatherState = (): ProjectState => ({
+      seriesTitle,
+      authorName,
+      storyboardStyle,
+      aspectRatio,
+      logline,
+      structuralAnalysis,
+      treatment,
+      subplots,
+      soundtrackPrompt,
+      references,
+      narrativeArc,
+      episodes,
+      characters
+  });
 
-  // Project Loading/Saving Logic
-  const resetState = () => {
-    applyState(null);
-    setCurrentProjectId(null);
-    const newState = JSON.stringify({ seriesTitle: '', authorName: '', storyboardStyle: 'Cinematic', aspectRatio: '16:9', soundtrackPrompt: '', logline: '', structuralAnalysis: '', treatment: '', references: [], episodes: [], characters: [], subplots: '', narrativeArc: [] });
-    lastSavedState.current = newState;
-    setIsDirty(false);
-    setWorkflowPhase('bible');
-  };
-
-  const handleNewProject = () => {
-    if (isDirty) {
-        setPendingAction({ type: 'new' });
-        setShowUnsavedChangesModal(true);
-    } else {
-        resetState();
-    }
-  };
-
-  const handleSave = async () => {
-      const state = gatherState();
-      if (currentProjectId) {
-          const projectId = await saveProject({ id: currentProjectId, name: state.seriesTitle || 'Untitled', state });
-          setCurrentProjectId(projectId);
-          lastSavedState.current = JSON.stringify(state);
-          setIsDirty(false);
+  const applyState = (state: ProjectState) => {
+      setSeriesTitle(state.seriesTitle || 'Untitled');
+      setAuthorName(state.authorName || '');
+      setStoryboardStyle(state.storyboardStyle || 'Cinematic');
+      setAspectRatio(state.aspectRatio || '16:9');
+      setLogline(state.logline || '');
+      setTreatment(state.treatment || '');
+      setStructuralAnalysis(state.structuralAnalysis || '');
+      setSubplots(state.subplots || '');
+      setSoundtrackPrompt(state.soundtrackPrompt || '');
+      setReferences(state.references || []);
+      setNarrativeArc(state.narrativeArc || []);
+      setEpisodes(state.episodes || []);
+      setCharacters(state.characters || []);
+      
+      // Reset active episode if it doesn't exist in new state
+      if (state.episodes && state.episodes.length > 0) {
+          setActiveEpisodeId(state.episodes[0].id);
       } else {
-          setNewProjectName(state.seriesTitle || 'Untitled Project');
-          setShowSaveModal(true);
+          setActiveEpisodeId(null);
       }
   };
-  
-  const handleConfirmSave = async () => {
-      if (!newProjectName.trim()) return;
-      let state = gatherState();
-      state.seriesTitle = newProjectName;
-      setSeriesTitle(newProjectName);
-      const projectId = await saveProject({ name: newProjectName, state });
-      setCurrentProjectId(projectId);
-      lastSavedState.current = JSON.stringify(state);
-      setIsDirty(false);
-      setShowSaveModal(false);
-      setNewProjectName('');
+
+  const handleSaveProject = async () => {
+      const state = gatherState();
+      const id = await saveProject({
+          id: currentProjectId,
+          name: seriesTitle,
+          state
+      });
+      setCurrentProjectId(id);
+      loadProjectsList();
+      alert(t('projectSaved'));
   };
 
   const handleLoadProject = async (id: number) => {
       const project = await getProject(id);
       if (project) {
-          applyState(project.state);
           setCurrentProjectId(project.id);
-          lastSavedState.current = JSON.stringify(project.state);
-          setIsDirty(false);
+          applyState(project.state);
+          setShowProjectList(false);
+      }
+  };
+
+  const handleNewProject = () => {
+      if (window.confirm(t('unsavedChangesMessage'))) {
+          setCurrentProjectId(undefined);
+          setSeriesTitle('Untitled Project');
+          setEpisodes([]);
+          setCharacters([]);
+          setLogline('');
+          setTreatment('');
+          setNarrativeArc([]);
+          setReferences([]);
           setWorkflowPhase('bible');
       }
-      setShowLoadModal(false);
-  };
-  
-  const handleOpenLoad = async () => {
-    const projectList = await getProjectsList();
-    setProjects(projectList);
-    setShowLoadModal(true);
   };
 
   const handleDeleteProject = async (id: number) => {
       if (window.confirm(t('confirmDeleteProject'))) {
-        await deleteProject(id);
-        setProjects(await getProjectsList());
-        if (id === currentProjectId) resetState();
-      }
-  };
-
-  const handleUnsavedChangesConfirmation = async (proceed: boolean) => {
-      setShowUnsavedChangesModal(false);
-      if (proceed && pendingAction) {
-          setIsDirty(false);
-          if (pendingAction.type === 'new') resetState();
-          else if (pendingAction.type === 'loadProject' && pendingAction.payload) await handleLoadProject(pendingAction.payload.id);
-      }
-      setPendingAction(null);
-  };
-
-  // Story Generator Handler
-  const handleStoryGenerated = async (story: any) => {
-      setSeriesTitle(story.title);
-      setLogline(story.logline);
-      setSoundtrackPrompt(story.soundtrackPrompt);
-      setStructuralAnalysis(story.structuralAnalysis);
-      setTreatment(story.treatment);
-      setReferences(story.references);
-      setSubplots(story.subplots);
-      setNarrativeArc(story.narrativeArc || []);
-      
-      const newCharacters: Character[] = story.characters.map((char: any, i: number) => ({ ...char, id: Date.now() + i, images: [] }));
-      setCharacters(newCharacters);
-      
-      // Process episodes from the generator
-      const newEpisodes: Episode[] = story.episodes.map((ep: any, i: number) => ({
-          id: Date.now() + i,
-          title: ep.title,
-          synopsis: ep.synopsis,
-          // If scenes exist (usually just for Ep 1), process them
-          scenes: (ep.scenes || []).map((scene: any, sIdx: number) => ({
-              ...scene,
-              id: Date.now() + i * 1000 + sIdx,
-              shots: (scene.shots || []).map((shot: any) => ({ ...shot, imageUrl: null, videoUrl: null }))
-          }))
-      }));
-
-      setEpisodes(newEpisodes);
-      
-      if (newEpisodes.length > 0) {
-          setActiveEpisodeId(newEpisodes[0].id);
-          setWorkflowPhase('storyboard');
-      } else {
-          setWorkflowPhase('episodes');
-      }
-
-      // Trigger Mass Gen for characters and scenes of ALL episodes
-      const jobs: GenerationJob[] = [];
-      
-      newCharacters.forEach(char => {
-          jobs.push({ type: 'character', id: char.id, name: char.name, prompt: createCharacterImagePrompt(char, storyboardStyle, aspectRatio) });
-      });
-
-      // Generate shots for ALL episodes
-      newEpisodes.forEach((ep, epIdx) => {
-          ep.scenes.forEach(scene => {
-              scene.shots.forEach((shot: any, sIdx: number) => {
-                  jobs.push({ 
-                      type: 'shot', 
-                      id: shot.id, 
-                      parentId: scene.id, 
-                      name: `Ep${epIdx + 1} - ${scene.title} - Shot ${sIdx + 1}`, 
-                      prompt: createImagePromptForShot(shot, scene, newCharacters, storyboardStyle, aspectRatio) 
-                  });
-              });
-          });
-      });
-
-      if (jobs.length > 0) {
-          setShowMassGenConfirmModal(jobs);
-      }
-  };
-
-   const handleMassGeneration = async () => {
-      if (!showMassGenConfirmModal) return;
-      setIsMassGenerating(true);
-      setMassGenProgress({ current: 0, total: showMassGenConfirmModal.length });
-      const successes: string[] = [];
-      const failures: { name: string; error: string }[] = [];
-
-      for (const job of showMassGenConfirmModal) {
-          try {
-              const imageUrl = await generateImage(job.prompt);
-              successes.push(job.name);
-              if (job.type === 'character') {
-                  setCharacters(prev => prev.map(c => c.id === job.id ? { ...c, images: [...c.images, imageUrl] } : c));
-              } else {
-                  // Find the episode containing the scene. Since mass gen is mostly for Ep 1 right now, we scan episodes.
-                  setEpisodes(prevEps => prevEps.map(ep => ({
-                      ...ep,
-                      scenes: ep.scenes.map(s => s.id === job.parentId ? {
-                          ...s,
-                          shots: s.shots.map(shot => shot.id === job.id ? { ...shot, imageUrl } : shot)
-                      } : s)
-                  })));
-              }
-          } catch (error) {
-              failures.push({ name: job.name, error: (error as Error).message });
+          await deleteProject(id);
+          loadProjectsList();
+          if (currentProjectId === id) {
+              handleNewProject();
           }
-          setMassGenProgress(prev => ({ ...prev, current: prev.current + 1 }));
       }
-      setIsMassGenerating(false);
-      setShowMassGenConfirmModal(null);
-      setGenerationReport({ successes, failures });
   };
 
-  // PDF Export
-  const [isExporting, setIsExporting] = useState(false);
-  
-  const handleExportPDFClick = () => {
-     setShowPDFModal(true);
+  // ... Handlers for sub-components ...
+  const handleSaveStyle = async (images: {id: number, file: File, preview: string}[], prompt: string) => {
+      const styleImages = await Promise.all(images.map(async (img) => {
+          return new Promise<{data: string, mimeType: string}>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                  const base64 = (reader.result as string).split(',')[1];
+                  resolve({ data: base64, mimeType: img.file.type });
+              };
+              reader.readAsDataURL(img.file);
+          });
+      }));
+      
+      await saveCustomStyle({
+          name: `Style ${customStyles.length + 1}`,
+          images: styleImages,
+          prompt
+      });
+      loadCustomStyles();
   };
 
-  const executePDFExport = async (exportOptions: PDFExportOptions) => {
-    setShowPDFModal(false);
-    setIsExporting(true);
-    try {
-      await exportStoryboardToPDF(
-          seriesTitle, 
-          authorName, 
-          episodes, 
-          activeEpisodeId, 
-          characters, 
-          storyboardStyle, 
-          aspectRatio, 
-          t, 
-          soundtrackPrompt, 
-          logline,
-          structuralAnalysis,
-          treatment,
-          references,
-          exportOptions
-      );
-    } catch (error) { 
-        console.error("PDF Export failed:", error); 
-        alert('PDF Export Failed. Check console for details.'); 
-    } 
-    finally { setIsExporting(false); }
+  const handleDeleteStyle = async (id: number) => {
+      if (window.confirm(t('confirmDeleteStyle'))) {
+          await deleteCustomStyle(id);
+          loadCustomStyles();
+      }
   };
 
-  // Consistency Check Logic
-  const handleConsistencyApply = async (settings: ConsistencySettings) => {
-        setIsCoCreating(true);
-        try {
-            const currentState = gatherState();
-            const result = await ensureStoryConsistency(currentState, language, settings);
-            applyState(result.state);
-            setPendingModification({ state: result.state, explanation: result.explanation });
-            setShowModificationModal(false); 
-            setCoCreationStatus('success');
-            setShowConsistencyModal(false);
-            alert('Consistency check complete! Explanation: ' + result.explanation);
-        } catch (error) {
-            console.error("Consistency check failed", error);
-            setCoCreationStatus('error');
-            alert(t('coCreationError'));
-        } finally {
-            setIsCoCreating(false);
-        }
-  };
+  const activeEpisode = episodes.find(e => e.id === activeEpisodeId);
+
+  const menuItems = [
+      { id: 'bible', icon: BookOpenIcon, label: t('storyBoardTab') + ' / ' + t('outlineTab') },
+      { id: 'arc', icon: ActivityIcon, label: t('narrativeArcTitle') },
+      { id: 'generator', icon: LayoutGridIcon, label: t('storyGeneratorTab') },
+      { id: 'episodes', icon: FolderOpenIcon, label: t('episodes') },
+      { id: 'organizer', icon: LayoutGridIcon, label: t('visualOrganizerTitle') },
+      { id: 'storyboard', icon: FilmIcon, label: t('storyBoardTab') },
+      { id: 'video', icon: VideoIcon, label: t('videoGeneratorTab') },
+      { id: 'utilities', icon: ChartBarIcon, label: t('utilitiesTitle') },
+  ];
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, options }}>
-    <div className="flex h-screen bg-gray-900 text-white font-sans overflow-hidden selection:bg-indigo-500 selection:text-white">
-      
-      {/* Sidebar Navigation */}
-      <aside className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col z-20">
-         <div className="p-4 border-b border-gray-700 flex items-center gap-3">
-            <FilmIcon className="w-6 h-6 text-indigo-500" />
-            <span className="font-bold text-lg tracking-tight">Storyboard AI</span>
-         </div>
-
-         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            <button onClick={() => { setWorkflowPhase('bible'); setBibleTab('general'); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'bible' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <BookOpenIcon className="w-5 h-5" /> Series Bible
-            </button>
-            <button onClick={() => setWorkflowPhase('arc')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'arc' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <ActivityIcon className="w-5 h-5" /> Narrative Arc
-            </button>
-             <button onClick={() => setWorkflowPhase('organizer')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'organizer' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <LayoutGridIcon className="w-5 h-5" /> Visual Organizer
-            </button>
-            <button onClick={() => setWorkflowPhase('episodes')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'episodes' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <RowsIcon className="w-5 h-5" /> Episodes
-            </button>
-            <button onClick={() => {
-                if (activeEpisodeId === null && episodes.length > 0) setActiveEpisodeId(episodes[0].id);
-                if (episodes.length === 0) { alert('Create an episode first.'); return; }
-                setWorkflowPhase('storyboard');
-            }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'storyboard' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <FilmIcon className="w-5 h-5" /> Storyboard
-            </button>
-            <button onClick={() => setWorkflowPhase('generator')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'generator' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <WandIcon className="w-5 h-5" /> AI Generator
-            </button>
-            <div className="my-4 border-t border-gray-700"></div>
-            <button onClick={() => setWorkflowPhase('utilities')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'utilities' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <ChartBarIcon className="w-5 h-5" /> Utilities
-            </button>
-            <button onClick={() => {
-                if (activeEpisodeId === null && episodes.length > 0) setActiveEpisodeId(episodes[0].id);
-                setWorkflowPhase('export');
-            }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${workflowPhase === 'export' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
-                <VideoIcon className="w-5 h-5" /> Export & Video
-            </button>
-         </nav>
-         
-         <div className="p-4 border-t border-gray-700 space-y-2">
-            <button onClick={handleSave} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">
-                <FloppyDiskIcon className="w-4 h-4" /> {t('saveProject')}
-            </button>
-            <button onClick={handleOpenLoad} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">
-                <FolderOpenIcon className="w-4 h-4" /> {t('loadProject')}
-            </button>
-            <button onClick={handleNewProject} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">
-                <PlusIcon className="w-4 h-4" /> {t('newProject')}
-            </button>
-            <LanguageSelector />
-         </div>
-      </aside>
-      
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-         <header className="bg-gray-800/50 border-b border-gray-700 h-16 px-6 flex items-center justify-between z-10">
-            <div>
-                <h1 className="text-xl font-bold text-white">{seriesTitle || 'Untitled Series'}</h1>
-                {workflowPhase === 'storyboard' && activeEpisodeId && (
-                    <p className="text-xs text-gray-400">Editing: {episodes.find(e => e.id === activeEpisodeId)?.title}</p>
-                )}
-            </div>
-            <div className="flex items-center gap-4">
-                {/* Global Project Settings Inputs */}
-                 <div className="flex items-center gap-2">
-                     <select
-                        value={storyboardStyle}
-                        onChange={(e) => setStoryboardStyle(e.target.value as StoryboardStyle)}
-                        className="bg-gray-700 border-gray-600 text-xs text-white rounded focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                        {Object.entries(options.storyboardStyleOptions).map(([value, label]) => (
-                            <option key={value} value={value}>{label as string}</option>
-                        ))}
-                    </select>
-                    <select
-                        value={aspectRatio}
-                        onChange={(e) => setAspectRatio(e.target.value)}
-                        className="bg-gray-700 border-gray-600 text-xs text-white rounded focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                        {Object.entries(options.aspectRatioOptions).map(([value, label]) => (
-                            <option key={value} value={value}>{label as string}</option>
-                        ))}
-                    </select>
-                 </div>
-            </div>
-         </header>
-
-         <div className="flex-1 overflow-y-auto p-8">
-            {workflowPhase === 'bible' && (
-                <div className="max-w-5xl mx-auto">
-                     <div className="mb-6 grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-1">{t('storyTitleLabel')}</label>
-                            <input type="text" value={seriesTitle} onChange={(e) => setSeriesTitle(e.target.value)} className="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-1">{t('authorLabel')}</label>
-                            <input type="text" value={authorName} onChange={(e) => setAuthorName(e.target.value)} className="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm" />
-                        </div>
-                     </div>
-                    <SeriesBible 
-                        logline={logline} setLogline={setLogline}
-                        treatment={treatment} setTreatment={setTreatment}
-                        subplots={subplots} setSubplots={setSubplots}
-                        references={references}
-                        structuralAnalysis={structuralAnalysis} setStructuralAnalysis={setStructuralAnalysis}
-                        soundtrackPrompt={soundtrackPrompt} setSoundtrackPrompt={setSoundtrackPrompt}
-                        characters={characters} updateCharacter={updateCharacter} deleteCharacter={deleteCharacter}
-                        storyboardStyle={storyboardStyle} aspectRatio={aspectRatio}
-                        customStyles={customStyles} onSaveAndApplyStyle={handleSaveStyle} onDeleteStyle={handleDeleteCustomStyle}
-                        activeTab={bibleTab}
-                        onTabChange={setBibleTab}
-                        onAddCharacter={addCharacter}
-                    />
+    <LanguageContext.Provider value={languageContextValue}>
+        <div className="flex h-screen bg-gray-900 text-white font-sans overflow-hidden">
+            
+            {/* SIDEBAR */}
+            <aside className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col flex-shrink-0 transition-all duration-300">
+                <div className="h-16 flex items-center px-6 border-b border-gray-700">
+                    <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">
+                        Storyboard AI
+                    </span>
                 </div>
-            )}
 
-            {workflowPhase === 'arc' && (
-                <NarrativeArcEditor
-                    arc={narrativeArc}
-                    setArc={setNarrativeArc}
-                    currentLogline={logline}
-                    currentTreatment={treatment}
-                    currentEpisodes={episodes.map(e => ({ title: e.title, synopsis: e.synopsis }))}
-                    onStoryUpdated={(newLogline, newTreatment, newEpisodesData) => {
-                        setLogline(newLogline);
-                        setTreatment(newTreatment);
-                        // Update episode synopses while keeping IDs and scenes
-                        setEpisodes(prev => prev.map((ep, i) => {
-                            const newData = newEpisodesData[i];
-                            return newData ? { ...ep, title: newData.title, synopsis: newData.synopsis } : ep;
-                        }));
-                        alert('Story updated based on new narrative arc!');
-                    }}
-                />
-            )}
+                <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+                    {menuItems.map(item => (
+                        <button
+                            key={item.id}
+                            onClick={() => setWorkflowPhase(item.id)}
+                            className={`w-full flex items-center px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                                workflowPhase === item.id 
+                                ? 'bg-indigo-600 text-white shadow-md' 
+                                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                            }`}
+                        >
+                            <item.icon className={`w-5 h-5 mr-3 ${workflowPhase === item.id ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`} />
+                            {item.label}
+                        </button>
+                    ))}
+                </nav>
 
-            {workflowPhase === 'organizer' && (
-                <VisualOrganizer 
-                    episodes={episodes} 
-                    onUpdateEpisodes={(newEpisodes) => {
-                        setEpisodes(newEpisodes);
-                        // Trigger the consistency check modal immediately after reordering
-                        setLastConsistencySettings({ intensity: 5, weirdness: 3, instructions: 'Review logic and continuity after manual scene reordering.' });
-                        setShowConsistencyModal(true);
-                    }} 
-                />
-            )}
-
-            {workflowPhase === 'episodes' && (
-                <div className="max-w-4xl mx-auto">
-                    <EpisodeList 
-                        episodes={episodes}
-                        activeEpisodeId={activeEpisodeId}
-                        onAddEpisode={addEpisode}
-                        onDeleteEpisode={deleteEpisode}
-                        onUpdateEpisode={updateEpisode}
-                        onSelectEpisode={(id) => { setActiveEpisodeId(id); setWorkflowPhase('storyboard'); }}
-                    />
+                <div className="p-4 border-t border-gray-700">
+                    <div className="text-xs text-gray-500 text-center">
+                        v1.5.0 Studio Edition
+                    </div>
                 </div>
-            )}
+            </aside>
 
-            {workflowPhase === 'storyboard' && activeEpisodeId !== null && (
-                <div className="max-w-6xl mx-auto">
-                    <div className="flex justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                             <h2 className="text-2xl font-bold">{episodes.find(e => e.id === activeEpisodeId)?.title}</h2>
-                             <span className="bg-indigo-900 text-indigo-300 text-xs px-2 py-1 rounded-full">{activeScenes.length} Scenes</span>
-                        </div>
-                        <div className="flex gap-2">
-                             <button onClick={() => addScene()} className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white h-9 px-3">
-                                <PlusIcon className="w-4 h-4 mr-2" /> Add Scene
-                            </button>
+            {/* MAIN WRAPPER */}
+            <div className="flex-1 flex flex-col min-w-0">
+                
+                {/* TOP HEADER */}
+                <header className="h-16 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-20">
+                    {/* Left: Title */}
+                    <div className="flex items-center gap-4">
+                        <div className="hidden md:block w-px h-6 bg-gray-600 mx-2"></div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">{t('project')}</label>
+                            <input 
+                                type="text" 
+                                value={seriesTitle}
+                                onChange={(e) => setSeriesTitle(e.target.value)}
+                                className="bg-transparent border-none text-sm font-bold text-white focus:ring-0 placeholder-gray-500 p-0 w-64"
+                                placeholder={t('untitledProject')}
+                            />
                         </div>
                     </div>
-                    
-                    {activeScenes.length === 0 ? (
-                         <div className="text-center py-20 px-6 bg-gray-800/30 rounded-lg border-2 border-dashed border-gray-700 flex flex-col items-center">
-                            <FilmIcon className="w-16 h-16 text-gray-600 mb-4" />
-                            <p className="text-xl text-gray-400 font-semibold">This episode is empty.</p>
-                            <button onClick={() => addScene()} className="mt-6 inline-flex items-center justify-center rounded-md text-sm font-medium bg-indigo-600 text-indigo-50 hover:bg-indigo-600/90 h-10 px-4 py-2">
-                                <PlusIcon className="w-4 h-4 mr-2" /> Add First Scene
+
+                    {/* Right: Actions Toolbar */}
+                    <div className="flex items-center gap-2">
+                        
+                        {/* New Project */}
+                        <button onClick={handleNewProject} className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors" title={t('newProject')}>
+                            <PlusIcon className="w-5 h-5" />
+                        </button>
+
+                        {/* Save Project */}
+                        <button onClick={handleSaveProject} className="p-2 text-gray-400 hover:text-indigo-400 hover:bg-gray-700 rounded transition-colors" title={t('saveProject')}>
+                            <FloppyDiskIcon className="w-5 h-5" />
+                        </button>
+                        
+                        {/* Load Project */}
+                        <div className="relative">
+                            <button onClick={() => setShowProjectList(!showProjectList)} className="p-2 text-gray-400 hover:text-indigo-400 hover:bg-gray-700 rounded transition-colors" title={t('loadProject')}>
+                                <FolderOpenIcon className="w-5 h-5" />
                             </button>
+                            
+                            {/* Project List Dropdown */}
+                            {showProjectList && (
+                                <div className="absolute right-0 top-full mt-2 w-64 bg-gray-800 border border-gray-700 rounded-md shadow-xl overflow-hidden z-50 animate-fade-in">
+                                    <div className="p-2 border-b border-gray-700 bg-gray-900/50">
+                                        <span className="text-xs font-bold uppercase text-gray-500 px-2">{t('loadProject')}</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                        {projectsList.map(p => (
+                                            <div key={p.id} className="flex items-center justify-between p-2 hover:bg-gray-700 group cursor-pointer border-b border-gray-700/50 last:border-0">
+                                                <button onClick={() => handleLoadProject(p.id)} className="flex-1 text-left text-sm text-gray-300 truncate px-1">
+                                                    {p.name}
+                                                    <span className="block text-[10px] text-gray-500">{new Date(p.modified).toLocaleDateString()}</span>
+                                                </button>
+                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-600 rounded opacity-0 group-hover:opacity-100 transition-all">
+                                                    <TrashIcon className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {projectsList.length === 0 && <div className="p-4 text-center text-xs text-gray-500">{t('noProjectsFoundError')}</div>}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <Storyboard
-                          scenes={activeScenes}
-                          characters={characters}
-                          updateSceneDetails={updateSceneDetails}
-                          deleteScene={deleteScene}
-                          addShot={addShot}
-                          updateShot={updateShot}
-                          deleteShot={deleteShot}
-                          storyboardStyle={storyboardStyle}
-                          aspectRatio={aspectRatio}
-                          reorderScenes={reorderScenes}
-                          reorderShots={reorderShots}
-                        />
-                    )}
-                </div>
-            )}
 
-            {workflowPhase === 'generator' && (
-                <div className="max-w-4xl mx-auto">
-                    <StoryGenerator onStoryGenerated={handleStoryGenerated} aspectRatio={aspectRatio} />
-                </div>
-            )}
+                        <div className="h-6 w-px bg-gray-600 mx-2"></div>
 
-            {workflowPhase === 'utilities' && (
-                <Utilities 
-                    episodes={episodes} 
-                    characters={characters}
-                    setEpisodes={setEpisodes}
-                    setCharacters={setCharacters}
-                    storyboardStyle={storyboardStyle}
-                    aspectRatio={aspectRatio}
-                />
-            )}
-
-            {workflowPhase === 'export' && (
-                <div className="max-w-6xl mx-auto space-y-8">
-                     <div className="flex items-center justify-between">
-                         <h2 className="text-3xl font-bold">Export & Production</h2>
-                         
-                         {/* Episode Selector to ensure we export the right content */}
-                         <div className="flex items-center gap-3">
-                            <label className="text-sm text-gray-400">Active Episode:</label>
-                            <select 
-                                value={activeEpisodeId || ''} 
-                                onChange={(e) => setActiveEpisodeId(Number(e.target.value))}
-                                className="bg-gray-700 border-gray-600 text-white text-sm rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
-                            >
-                                {episodes.map(ep => (
-                                    <option key={ep.id} value={ep.id}>{ep.title}</option>
-                                ))}
-                            </select>
-                         </div>
-                     </div>
-        
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         {/* Export PDF Card */}
-                         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 hover:border-indigo-500 transition-all hover:shadow-lg hover:shadow-indigo-500/10 group">
-                             <div className="flex items-start justify-between mb-4">
-                                 <div className="p-3 bg-red-500/10 rounded-lg">
-                                     <DownloadIcon className="w-8 h-8 text-red-400" />
-                                 </div>
-                             </div>
-                             <h3 className="text-xl font-bold text-white mb-2">Export to PDF</h3>
-                             <p className="text-gray-400 text-sm mb-6">
-                                Compile scenes, shots, and metadata into a professional storyboard PDF document. Choose which episodes to include.
-                             </p>
-                             <button 
-                                onClick={handleExportPDFClick} 
-                                disabled={isExporting || episodes.length === 0}
-                                className="w-full inline-flex items-center justify-center rounded-md text-sm font-bold bg-white text-gray-900 hover:bg-gray-200 h-10 px-4 py-2 transition-colors disabled:opacity-50"
-                            >
-                                {isExporting ? <LoadingSpinner /> : 'Download PDF'}
+                        {/* Export Menu */}
+                        <div className="relative">
+                            <button onClick={() => setShowExportMenu(!showExportMenu)} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-sm font-medium transition-colors" title={t('exportMenu')}>
+                                <ShareIcon className="w-4 h-4" />
+                                <span className="hidden lg:inline">{t('exportMenu')}</span>
                             </button>
-                         </div>
-        
-                         {/* Generate Animatic Card */}
-                         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 hover:border-indigo-500 transition-all hover:shadow-lg hover:shadow-indigo-500/10 group">
-                             <div className="flex items-start justify-between mb-4">
-                                 <div className="p-3 bg-purple-500/10 rounded-lg">
-                                     <VideoIcon className="w-8 h-8 text-purple-400" />
-                                 </div>
-                             </div>
-                             <h3 className="text-xl font-bold text-white mb-2">Generate Animatic</h3>
-                             <p className="text-gray-400 text-sm mb-6">
-                                Create a video animatic for <strong>{episodes.find(e => e.id === activeEpisodeId)?.title || 'Selected Episode'}</strong> using your generated shots and estimated durations. Includes shots without images.
-                             </p>
-                             <button 
-                                onClick={() => setShowAnimaticModal(true)} 
-                                disabled={activeScenes.length === 0}
-                                className="w-full inline-flex items-center justify-center rounded-md text-sm font-bold bg-white text-gray-900 hover:bg-gray-200 h-10 px-4 py-2 transition-colors disabled:opacity-50"
-                            >
-                                Open Animatic Studio
-                            </button>
-                         </div>
-                     </div>
-        
-                     {/* AI Video Generator Section */}
-                     <div className="pt-8 border-t border-gray-700">
-                         <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                            <WandIcon className="w-5 h-5 text-indigo-400" />
-                            AI Video Generator
-                         </h3>
-                         <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                             <VideoGenerator />
-                         </div>
-                     </div>
-                </div>
-            )}
-         </div>
-         
-         {/* Floating Chat Widget */}
-         <div className="absolute bottom-6 right-6 z-50">
-              <ChatWidget
-                addScene={addScene}
-                updateScene={(s) => handleSceneUpdate(activeScenes.map(sc => sc.id === s.id ? s : sc))}
-                scenes={activeScenes}
-                characters={characters}
-                updateCharacter={updateCharacter}
-                addCharacterFromAI={addCharacterFromAI}
-                addVisualToCharacter={addVisualToCharacter}
-                storyboardStyle={storyboardStyle}
-                aspectRatio={aspectRatio}
-              />
-         </div>
+                            {showExportMenu && (
+                                <div className="absolute right-0 top-full mt-2 w-56 bg-gray-800 border border-gray-700 rounded-md shadow-xl z-50 py-1 animate-fade-in">
+                                    <button onClick={() => { setShowPDFModal(true); setShowExportMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border-b border-gray-700/50">
+                                        <DownloadIcon className="w-4 h-4 mr-3 text-red-400" /> {t('exportToPDF')}
+                                    </button>
+                                    <button onClick={() => { setShowAnimaticModal(true); setShowExportMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border-b border-gray-700/50">
+                                        <VideoIcon className="w-4 h-4 mr-3 text-purple-400" /> {t('exportAnimatic')}
+                                    </button>
+                                    <button onClick={() => { setShowFrameIOModal(true); setShowExportMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors">
+                                        <ShareIcon className="w-4 h-4 mr-3 text-blue-400" /> {t('shareOnFrameIO')}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
-      </main>
+                        <div className="h-6 w-px bg-gray-600 mx-2"></div>
+                        <LanguageSelector />
+                    </div>
+                </header>
 
-      {/* Modals */}
-      {showPDFModal && (
-          <PDFExportModal 
-             onExport={executePDFExport}
-             onClose={() => setShowPDFModal(false)}
-          />
-      )}
+                {/* CONTENT AREA */}
+                <main className="flex-1 overflow-y-auto p-6 scroll-smooth bg-gray-900 relative">
+                    <div className="max-w-7xl mx-auto">
+                        {workflowPhase === 'bible' && (
+                            <SeriesBible 
+                                logline={logline} setLogline={setLogline}
+                                treatment={treatment} setTreatment={setTreatment}
+                                subplots={subplots} setSubplots={setSubplots}
+                                references={references}
+                                structuralAnalysis={structuralAnalysis} setStructuralAnalysis={setStructuralAnalysis}
+                                soundtrackPrompt={soundtrackPrompt} setSoundtrackPrompt={setSoundtrackPrompt}
+                                characters={characters} updateCharacter={(c) => setCharacters(prev => prev.map(char => char.id === c.id ? c : char))}
+                                deleteCharacter={(id) => setCharacters(prev => prev.filter(c => c.id !== id))}
+                                storyboardStyle={storyboardStyle} aspectRatio={aspectRatio}
+                                customStyles={customStyles} onSaveAndApplyStyle={handleSaveStyle} onDeleteStyle={handleDeleteStyle}
+                                activeTab={bibleTab} onTabChange={setBibleTab}
+                                onAddCharacter={() => setCharacters([...characters, { id: generateId(), name: '', role: '', personality: '', appearance: '', outfit: '', behavior: '', images: [] }])}
+                            />
+                        )}
 
-      {showSaveModal && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-              <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-gray-700">
-                  <h3 className="text-lg font-semibold mb-4">{t('confirmSaveTitle')}</h3>
-                  <input type="text" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} className="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm mb-4" autoFocus />
-                  <div className="flex justify-end gap-2">
-                      <button onClick={() => setShowSaveModal(false)} className="px-4 py-2 text-sm rounded-md bg-gray-700 hover:bg-gray-600">{t('cancel')}</button>
-                      <button onClick={handleConfirmSave} className="px-4 py-2 text-sm rounded-md bg-indigo-600 hover:bg-indigo-500 text-white" disabled={!newProjectName.trim()}>{t('save')}</button>
-                  </div>
-              </div>
-          </div>
-      )}
-      
-      {showLoadModal && (
-           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-              <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-2xl w-full border border-gray-700 max-h-[80vh] flex flex-col">
-                  <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold">{t('loadProjectTitle')}</h3>
-                      <button onClick={() => setShowLoadModal(false)}><UserIcon className="w-5 h-5 transform rotate-45" /></button>
-                  </div>
-                  <div className="overflow-y-auto flex-1 space-y-2">
-                      {projects.map(project => (
-                          <div key={project.id} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-md hover:bg-gray-700 transition-colors">
-                              <div>
-                                  <h4 className="font-semibold">{project.name}</h4>
-                                  <p className="text-xs text-gray-400">{new Date(project.modified).toLocaleDateString()}</p>
-                              </div>
-                              <div className="flex gap-2">
-                                   <button onClick={() => { 
-                                       if(isDirty) { setPendingAction({type:'loadProject', payload:{id:project.id}}); setShowUnsavedChangesModal(true); }
-                                       else handleLoadProject(project.id); 
-                                    }} className="px-3 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-500 text-white">{t('loadProject')}</button>
-                                   <button onClick={() => handleDeleteProject(project.id)} className="p-2 text-red-500 hover:text-red-400"><TrashIcon className="w-4 h-4" /></button>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          </div>
-      )}
+                        {workflowPhase === 'arc' && (
+                            <NarrativeArcEditor 
+                                arc={narrativeArc} setArc={setNarrativeArc}
+                                currentLogline={logline} currentTreatment={treatment} currentEpisodes={episodes}
+                                onStoryUpdated={(l, t, e) => { setLogline(l); setTreatment(t); /* Logic to merge episodes needed if complex */ }}
+                            />
+                        )}
 
-       {showUnsavedChangesModal && (
-           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-              <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-gray-700">
-                  <h3 className="text-lg font-semibold mb-4 text-yellow-400">{t('unsavedChangesTitle')}</h3>
-                  <p className="mb-6 text-gray-300">{t('unsavedChangesMessage')}</p>
-                  <div className="flex justify-end gap-3">
-                      <button onClick={() => handleUnsavedChangesConfirmation(false)} className="px-4 py-2 text-sm rounded-md bg-gray-700 hover:bg-gray-600">{t('cancel')}</button>
-                      <button onClick={() => handleUnsavedChangesConfirmation(true)} className="px-4 py-2 text-sm rounded-md bg-red-600 hover:bg-red-500 text-white">{t('proceed')}</button>
-                  </div>
-              </div>
-          </div>
-      )}
-      
-      {showMassGenConfirmModal && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-               <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-gray-700">
-                   {isMassGenerating ? (
-                       <div className="text-center">
-                           <h3 className="text-lg font-semibold mb-4">{t('generating')}</h3>
-                           <div className="w-full bg-gray-700 rounded-full h-2.5 mb-4">
-                               <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${(massGenProgress.current / massGenProgress.total) * 100}%` }}></div>
-                           </div>
-                           <p className="text-sm text-gray-400">{massGenProgress.current} / {massGenProgress.total}</p>
-                       </div>
-                   ) : (
-                       <>
-                           <h3 className="text-lg font-semibold mb-4">{t('confirmMassGenerationTitle')}</h3>
-                           <p className="mb-6 text-gray-300">{t('confirmMassGenerationMessage', { count: showMassGenConfirmModal.length })}</p>
-                           <div className="flex justify-end gap-3">
-                               <button onClick={() => setShowMassGenConfirmModal(null)} className="px-4 py-2 text-sm rounded-md bg-gray-700 hover:bg-gray-600">{t('confirmMassGenerationNo')}</button>
-                               <button onClick={handleMassGeneration} className="px-4 py-2 text-sm rounded-md bg-indigo-600 hover:bg-indigo-500 text-white">{t('confirmMassGenerationYes')}</button>
-                           </div>
-                       </>
-                   )}
-               </div>
-          </div>
-      )}
-      
-      {showSaveStyleModal && (
-           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-              <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-gray-700">
-                  <h3 className="text-lg font-semibold mb-4">{t('applyStyle')}</h3>
-                  <p className="mb-2 text-sm text-gray-400">Enter a name for this custom style:</p>
-                   <input type="text" value={newStyleName} onChange={(e) => setNewStyleName(e.target.value)} className="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm mb-4" autoFocus />
-                   <div className="flex justify-end gap-3">
-                       <button onClick={() => setShowSaveStyleModal(false)} className="px-4 py-2 text-sm rounded-md bg-gray-700 hover:bg-gray-600">{t('cancel')}</button>
-                       <button onClick={confirmSaveStyle} className="px-4 py-2 text-sm rounded-md bg-indigo-600 hover:bg-indigo-500 text-white" disabled={!newStyleName.trim()}>{t('save')}</button>
-                   </div>
-              </div>
-           </div>
-      )}
+                        {workflowPhase === 'generator' && (
+                            <StoryGenerator 
+                                aspectRatio={aspectRatio}
+                                onStoryGenerated={async (preview) => {
+                                    applyState({
+                                        ...gatherState(),
+                                        seriesTitle: preview.title,
+                                        logline: preview.logline,
+                                        treatment: preview.treatment,
+                                        structuralAnalysis: preview.structuralAnalysis,
+                                        subplots: preview.subplots,
+                                        soundtrackPrompt: preview.soundtrackPrompt,
+                                        narrativeArc: preview.narrativeArc,
+                                        references: preview.references,
+                                        characters: preview.characters.map((c, i) => ({ ...c, id: generateId() + i, images: [] })),
+                                        episodes: preview.episodes.map((ep, i) => ({
+                                            ...ep,
+                                            id: generateId() + i,
+                                            scenes: ep.scenes.map((s, j) => ({ ...s, id: generateId() + j, shots: [] }))
+                                        }))
+                                    });
+                                    setWorkflowPhase('bible');
+                                }}
+                            />
+                        )}
 
-      {showConsistencyModal && (
-          <ConsistencyModal 
-            onApply={handleConsistencyApply} 
-            onClose={() => setShowConsistencyModal(false)} 
-            isLoading={isCoCreating}
-            initialValues={lastConsistencySettings}
-          />
-      )}
+                        {workflowPhase === 'episodes' && (
+                            <EpisodeList 
+                                episodes={episodes}
+                                activeEpisodeId={activeEpisodeId}
+                                onSelectEpisode={(id) => { setActiveEpisodeId(id); setWorkflowPhase('storyboard'); }}
+                                onAddEpisode={() => {
+                                    const newEp = { id: generateId(), title: `Episode ${episodes.length + 1}`, synopsis: '', scenes: [] };
+                                    setEpisodes([...episodes, newEp]);
+                                    setActiveEpisodeId(newEp.id);
+                                }}
+                                onDeleteEpisode={(id) => {
+                                    setEpisodes(prev => prev.filter(e => e.id !== id));
+                                    if (activeEpisodeId === id) setActiveEpisodeId(null);
+                                }}
+                                onUpdateEpisode={(id, data) => setEpisodes(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))}
+                            />
+                        )}
 
-      {showFrameIOModal && (
-          <FrameIOExportModal scenes={activeScenes} aspectRatio={aspectRatio} storyTitle={seriesTitle} onClose={() => setShowFrameIOModal(false)} />
-      )}
+                        {workflowPhase === 'organizer' && (
+                            <VisualOrganizer 
+                                episodes={episodes}
+                                onUpdateEpisodes={(newEpisodes) => {
+                                    setEpisodes(newEpisodes);
+                                    // Trigger consistency check workflow automatically
+                                    if (window.confirm(t('updateStoryOrder') + "? " + t('consistencyModalDescription'))) {
+                                        setShowConsistencyModal(true);
+                                    }
+                                }}
+                            />
+                        )}
 
-      {showAnimaticModal && (
-          <AnimaticExportModal scenes={activeScenes} aspectRatio={aspectRatio} storyTitle={seriesTitle} onClose={() => setShowAnimaticModal(false)} />
-      )}
+                        {workflowPhase === 'storyboard' && activeEpisode ? (
+                            <div className="animate-fade-in">
+                                <div className="mb-6 flex justify-between items-center">
+                                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                                        <FilmIcon className="w-6 h-6 text-indigo-400"/>
+                                        {activeEpisode.title}
+                                        <span className="text-sm font-normal text-gray-500 ml-2">({activeEpisode.scenes.length} scenes)</span>
+                                    </h2>
+                                    <button onClick={() => setWorkflowPhase('episodes')} className="text-sm text-indigo-400 hover:underline">
+                                        &larr; Back to Episodes
+                                    </button>
+                                </div>
+                                <Storyboard 
+                                    scenes={activeEpisode.scenes}
+                                    characters={characters}
+                                    storyboardStyle={storyboardStyle}
+                                    aspectRatio={aspectRatio}
+                                    updateSceneDetails={(id, details) => {
+                                        setEpisodes(prev => prev.map(ep => ep.id === activeEpisode.id ? {
+                                            ...ep,
+                                            scenes: ep.scenes.map(s => s.id === id ? { ...s, ...details } : s)
+                                        } : ep));
+                                    }}
+                                    deleteScene={(id) => {
+                                        setEpisodes(prev => prev.map(ep => ep.id === activeEpisode.id ? {
+                                            ...ep,
+                                            scenes: ep.scenes.filter(s => s.id !== id)
+                                        } : ep));
+                                    }}
+                                    addShot={(sceneId) => {
+                                        setEpisodes(prev => prev.map(ep => ep.id === activeEpisode.id ? {
+                                            ...ep,
+                                            scenes: ep.scenes.map(s => s.id === sceneId ? {
+                                                ...s,
+                                                shots: [...s.shots, { id: generateId(), description: '', imageUrl: null, videoUrl: null, shotType: 'Medium Shot (MS)', cameraMovement: 'Static', cameraType: 'Digital Cinema Camera', lensType: 'Standard', lensBlur: 'None', atmosphere: 'Neutral', lighting: 'Natural Light', style: 'Cinematic', technicalNotes: '', colorGrade: 'Neutral', filmGrain: 'None', filmStock: 'Digital', duration: 2, soundFx: '', notes: '' }]
+                                            } : s)
+                                        } : ep));
+                                    }}
+                                    updateShot={(sceneId, shot) => {
+                                        setEpisodes(prev => prev.map(ep => ep.id === activeEpisode.id ? {
+                                            ...ep,
+                                            scenes: ep.scenes.map(s => s.id === sceneId ? {
+                                                ...s,
+                                                shots: s.shots.map(sh => sh.id === shot.id ? shot : sh)
+                                            } : s)
+                                        } : ep));
+                                    }}
+                                    deleteShot={(sceneId, shotId) => {
+                                        setEpisodes(prev => prev.map(ep => ep.id === activeEpisode.id ? {
+                                            ...ep,
+                                            scenes: ep.scenes.map(s => s.id === sceneId ? {
+                                                ...s,
+                                                shots: s.shots.filter(sh => sh.id !== shotId)
+                                            } : s)
+                                        } : ep));
+                                    }}
+                                    reorderScenes={(start, end) => {
+                                        const newScenes = [...activeEpisode.scenes];
+                                        const [removed] = newScenes.splice(start, 1);
+                                        newScenes.splice(end, 0, removed);
+                                        setEpisodes(prev => prev.map(ep => ep.id === activeEpisode.id ? { ...ep, scenes: newScenes } : ep));
+                                    }}
+                                    reorderShots={(sceneId, start, end) => {
+                                        setEpisodes(prev => prev.map(ep => ep.id === activeEpisode.id ? {
+                                            ...ep,
+                                            scenes: ep.scenes.map(s => {
+                                                if (s.id !== sceneId) return s;
+                                                const newShots = [...s.shots];
+                                                const [removed] = newShots.splice(start, 1);
+                                                newShots.splice(end, 0, removed);
+                                                return { ...s, shots: newShots };
+                                            })
+                                        } : ep));
+                                    }}
+                                />
+                            </div>
+                        ) : workflowPhase === 'storyboard' && (
+                            <div className="text-center py-20 text-gray-500 bg-gray-800/20 rounded-xl border border-dashed border-gray-700">
+                                <FilmIcon className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                                <p className="text-lg mb-2">No Episode Selected</p>
+                                <button onClick={() => setWorkflowPhase('episodes')} className="text-indigo-400 hover:underline">Go to Episodes List</button>
+                            </div>
+                        )}
 
-    </div>
+                        {workflowPhase === 'video' && <VideoGenerator />}
+
+                        {workflowPhase === 'utilities' && (
+                            <Utilities 
+                                episodes={episodes} 
+                                characters={characters}
+                                setEpisodes={setEpisodes}
+                                setCharacters={setCharacters}
+                                storyboardStyle={storyboardStyle}
+                                aspectRatio={aspectRatio}
+                                onGetProjectState={gatherState}
+                                onImportProject={applyState}
+                            />
+                        )}
+                    </div>
+                </main>
+
+                {/* --- MODALS --- */}
+                {showPDFModal && (
+                    <PDFExportModal
+                        onExport={(opts) => {
+                            import('./services/pdfService').then(mod => {
+                                mod.exportStoryboardToPDF(
+                                    seriesTitle,
+                                    authorName,
+                                    episodes,
+                                    activeEpisodeId,
+                                    characters,
+                                    storyboardStyle,
+                                    aspectRatio,
+                                    t,
+                                    soundtrackPrompt,
+                                    logline,
+                                    structuralAnalysis,
+                                    treatment,
+                                    references,
+                                    opts
+                                );
+                                setShowPDFModal(false);
+                            });
+                        }}
+                        onClose={() => setShowPDFModal(false)}
+                    />
+                )}
+
+                {showAnimaticModal && (
+                    <AnimaticExportModal
+                        scenes={activeEpisode ? activeEpisode.scenes : episodes.flatMap(e => e.scenes)}
+                        aspectRatio={aspectRatio}
+                        storyTitle={seriesTitle}
+                        onClose={() => setShowAnimaticModal(false)}
+                    />
+                )}
+
+                {showFrameIOModal && (
+                    <FrameIOExportModal
+                        scenes={activeEpisode ? activeEpisode.scenes : episodes.flatMap(e => e.scenes)}
+                        aspectRatio={aspectRatio}
+                        storyTitle={seriesTitle}
+                        onClose={() => setShowFrameIOModal(false)}
+                    />
+                )}
+
+                {showModificationModal && (
+                    <ModificationModal
+                        onApply={async (settings) => {
+                            setShowModificationModal(false);
+                            setIsProcessingAI(true);
+                            try {
+                                const result = await modifyStory(gatherState(), settings, language);
+                                setModificationPreviewData({ explanation: result.explanation, state: result.state });
+                                setShowModificationPreview(true);
+                            } catch (e) {
+                                alert(t('coCreationError'));
+                            } finally {
+                                setIsProcessingAI(false);
+                            }
+                        }}
+                        onClose={() => setShowModificationModal(false)}
+                        isLoading={isProcessingAI}
+                    />
+                )}
+
+                {showConsistencyModal && (
+                    <ConsistencyModal
+                        onApply={async (settings) => {
+                            setIsProcessingAI(true);
+                            try {
+                                const result = await ensureStoryConsistency(gatherState(), language, settings);
+                                applyState(result.state);
+                                setShowConsistencyModal(false);
+                                alert(t('projectSaved') + '\n' + result.explanation);
+                            } catch(e) {
+                                alert(t('errorGeneric', { message: (e as Error).message }));
+                            } finally {
+                                setIsProcessingAI(false);
+                            }
+                        }}
+                        onClose={() => setShowConsistencyModal(false)}
+                        isLoading={isProcessingAI}
+                    />
+                )}
+
+                {showModificationPreview && modificationPreviewData && (
+                    <ModificationPreviewModal
+                        explanation={modificationPreviewData.explanation}
+                        proposedState={modificationPreviewData.state}
+                        onConfirm={(finalState) => {
+                            applyState(finalState);
+                            setShowModificationPreview(false);
+                            setModificationPreviewData(null);
+                        }}
+                        onCancel={() => {
+                            setShowModificationPreview(false);
+                            setModificationPreviewData(null);
+                        }}
+                        onBack={() => {
+                            setShowModificationPreview(false);
+                            setShowModificationModal(true);
+                        }}
+                    />
+                )}
+            </div>
+        </div>
     </LanguageContext.Provider>
   );
 };

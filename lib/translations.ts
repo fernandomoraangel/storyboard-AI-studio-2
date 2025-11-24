@@ -4,6 +4,14 @@
 
 
 
+
+
+
+
+
+
+
+
 export type Language = 'en' | 'es';
 
 export type Options = {
@@ -209,6 +217,18 @@ export const translations: Record<Language, Translations> = {
     totalWords: "Total Words",
     approxTokens: "Approx. Tokens",
     
+    // Import / Export
+    importExportTitle: "Import / Export",
+    exportJSON: "Export Project Data (.json5)",
+    exportZIP: "Export Images (.zip)",
+    importProject: "Import Project (.json5)",
+    importImagesOptional: "Include Images (.zip) - Optional",
+    loadProject: "Load Project",
+    projectImportedSuccess: "Project imported successfully!",
+    jsonRequired: "Please select a JSON5 file.",
+    readingFile: "Reading file...",
+    exporting: "Exporting...",
+    
     // Frame.io
     frameIOTokenSetup: "Frame.io Setup",
     setupInstructions_token_1: "To export to Frame.io, you need a Developer Token.",
@@ -256,6 +276,7 @@ export const translations: Record<Language, Translations> = {
     animaticPreviewPlaceholder: "Preview will appear here...",
     animaticDownload: "Download Animatic",
     exportAnimatic: "Export Animatic (WebM)",
+    exportMenu: "Export",
     
     // Style Transfer
     styleTransfer: "Style Transfer",
@@ -409,7 +430,6 @@ export const translations: Record<Language, Translations> = {
     // Project Management
     newProject: "New Project",
     saveProject: "Save Project",
-    loadProject: "Load Project",
     projectSaved: "Project saved!",
     untitledProject: "Untitled Project",
     deleteProject: "Delete",
@@ -724,38 +744,38 @@ export const translations: Record<Language, Translations> = {
             ]
         },
         transitionTypeOptions: [
-            'CUT TO',
-            'DISSOLVE TO',
-            'FADE TO',
-            'SMASH CUT TO',
-            'JUMP CUT TO',
-            'MATCH CUT TO',
-            'WIPE TO',
-            'IRIS OUT TO',
-            'FADE TO BLACK',
-            'FADE IN'
+            'CORTE A',
+            'DISOLVENCIA A',
+            'FUNDIDO A',
+            'CORTE DE GOLPE A',
+            'SALTO DE EJE A',
+            'CORTE DE CONTINUIDAD A',
+            'BARRIDO A',
+            'IRIS DE SALIDA A',
+            'FUNDIDO A NEGRO',
+            'FUNDIDO DE ENTRADA'
         ],
         storyboardStyleOptions: {
-            Cinematic: 'Cinematic (Photorealistic)',
-            Sketch: 'Sketch (Charcoal)',
-            ComicBook: 'Comic Book',
+            Cinematic: 'Cinematográfico (Fotorrealista)',
+            Sketch: 'Boceto (Carbón)',
+            ComicBook: 'Cómic',
             Anime: 'Anime',
-            FilmNoir: 'Film Noir',
-            LineDrawing: 'Clean Line Drawing',
-            QuickLineDrawing: 'Quick Gestural Sketch',
+            FilmNoir: 'Cine Negro',
+            LineDrawing: 'Dibujo de Línea Limpia',
+            QuickLineDrawing: 'Boceto Gestual Rápido',
             LowPoly: 'Low Poly 3D',
-            StylizedVideoGame: 'Stylized Video Game',
+            StylizedVideoGame: 'Videojuego Estilizado',
             Solarpunk: 'Solarpunk',
             Cyberpunk: 'Cyberpunk',
-            Sepia: 'Vintage Sepia',
-            Custom: 'Custom Style'
+            Sepia: 'Sepia Vintage',
+            Custom: 'Estilo Personalizado'
         },
         aspectRatioOptions: {
-            '16:9': '16:9 (Widescreen)',
-            '9:16': '9:16 (Vertical/Phone)',
-            '4:3': '4:3 (Standard TV)',
+            '16:9': '16:9 (Panorámico)',
+            '9:16': '9:16 (Vertical/Teléfono)',
+            '4:3': '4:3 (TV Estándar)',
             '3:4': '3:4 (Vertical)',
-            '1:1': '1:1 (Square)',
+            '1:1': '1:1 (Cuadrado)',
             '2.35:1': '2.35:1 (Cinemascope)'
         }
     }
@@ -937,6 +957,18 @@ export const translations: Record<Language, Translations> = {
     stopRegeneration: "Detener",
     totalWords: "Palabras Totales",
     approxTokens: "Tokens Aprox.",
+    
+    // Import / Export
+    importExportTitle: "Importar / Exportar",
+    exportJSON: "Exportar Datos del Proyecto (.json5)",
+    exportZIP: "Exportar Imágenes (.zip)",
+    importProject: "Importar Proyecto (.json5)",
+    importImagesOptional: "Incluir Imágenes (.zip) - Opcional",
+    loadProject: "Cargar Proyecto",
+    projectImportedSuccess: "¡Proyecto importado exitosamente!",
+    jsonRequired: "Por favor selecciona un archivo JSON5.",
+    readingFile: "Leyendo archivo...",
+    exporting: "Exportando...",
 
     // Frame.io
     frameIOTokenSetup: "Configuración de Frame.io",
@@ -985,6 +1017,7 @@ export const translations: Record<Language, Translations> = {
     animaticPreviewPlaceholder: "La vista previa aparecerá aquí...",
     animaticDownload: "Descargar Animática",
     exportAnimatic: "Exportar Animática (WebM)",
+    exportMenu: "Exportar",
 
     // Style Transfer
     styleTransfer: "Transferencia de Estilo",
@@ -1154,10 +1187,6 @@ export const translations: Record<Language, Translations> = {
     save: "Guardar",
     
     loadProjectTitle: "Cargar Proyecto",
-
-    // Check Consistency
-    checkConsistency: "Auto-Corregir / Co-Crear",
-    modifyStory: "Modificar Historia",
 
     options: {
         shotTypeOptions: [
@@ -1436,7 +1465,7 @@ export const translations: Record<Language, Translations> = {
                 'Todo sacrificado por una pasión', 'Necesidad de sacrificar seres queridos', 'Rivalidad de superior e inferior',
                 'Adulterio', 'Crímenes de amor', 'Descubrimiento de la deshonra de un ser querido', 'Obstáculos al amor',
                 'Un enemigo amado', 'Ambition', 'Conflicto con un dios', 'Celos equivocados', 'Juicio erróneo',
-                'Remordimiento', 'Recuperación de un ser perdido', 'Pérdida de seres queridos'
+                'Remorse', 'Recovery of a Lost One', 'Pérdida de seres queridos'
             ],
             mckeeValues: [
                 'Vida / Muerte',

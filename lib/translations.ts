@@ -1,5 +1,4 @@
 
-
 export type Language = 'en' | 'es';
 
 export type Options = {
@@ -168,7 +167,7 @@ export const translations: Record<Language, Translations> = {
     suggestPremise: "Suggest Premise with AI",
     
     confirmMassGenerationTitle: "Generate All Images?",
-    confirmMassGenerationMessage: "Do you want to generate all {count} images for the characters and shots now? This may take some time and consume API quota.",
+    confirmMassGenerationMessage: "The story has been created. Do you want to generate AI visuals for all characters and scenes now? This may take some time.",
     confirmMassGenerationYes: "Yes, Generate All",
     confirmMassGenerationNo: "No, I'll do it manually",
 
@@ -732,38 +731,38 @@ export const translations: Record<Language, Translations> = {
             ]
         },
         transitionTypeOptions: [
-            'CORTE A',
-            'DISOLVENCIA A',
-            'FUNDIDO A',
-            'CORTE DE GOLPE A',
-            'SALTO DE EJE A',
-            'CORTE DE CONTINUIDAD A',
-            'BARRIDO A',
-            'IRIS DE SALIDA A',
-            'FUNDIDO A NEGRO',
-            'FUNDIDO DE ENTRADA'
+            'CUT TO',
+            'DISSOLVE TO',
+            'FADE TO',
+            'SMASH CUT TO',
+            'JUMP CUT TO',
+            'MATCH CUT TO',
+            'WIPE TO',
+            'IRIS OUT TO',
+            'FADE TO BLACK',
+            'FADE IN'
         ],
         storyboardStyleOptions: {
-            Cinematic: 'Cinematográfico (Fotorrealista)',
-            Sketch: 'Boceto (Carbón)',
-            ComicBook: 'Cómic',
+            Cinematic: 'Cinematic (Photorealistic)',
+            Sketch: 'Sketch (Charcoal)',
+            ComicBook: 'Comic Book',
             Anime: 'Anime',
-            FilmNoir: 'Cine Negro',
-            LineDrawing: 'Dibujo de Línea Limpia',
-            QuickLineDrawing: 'Boceto Gestual Rápido',
+            FilmNoir: 'Film Noir',
+            LineDrawing: 'Clean Line Drawing',
+            QuickLineDrawing: 'Quick Gestural Sketch',
             LowPoly: 'Low Poly 3D',
-            StylizedVideoGame: 'Videojuego Estilizado',
+            StylizedVideoGame: 'Stylized Video Game',
             Solarpunk: 'Solarpunk',
             Cyberpunk: 'Cyberpunk',
-            Sepia: 'Sepia Vintage',
-            Custom: 'Estilo Personalizado'
+            Sepia: 'Vintage Sepia',
+            Custom: 'Custom Style'
         },
         aspectRatioOptions: {
-            '16:9': '16:9 (Panorámico)',
-            '9:16': '9:16 (Vertical/Teléfono)',
-            '4:3': '4:3 (TV Estándar)',
+            '16:9': '16:9 (Widescreen)',
+            '9:16': '9:16 (Vertical/Phone)',
+            '4:3': '4:3 (Standard TV)',
             '3:4': '3:4 (Vertical)',
-            '1:1': '1:1 (Cuadrado)',
+            '1:1': '1:1 (Square)',
             '2.35:1': '2.35:1 (Cinemascope)'
         }
     }
@@ -909,7 +908,7 @@ export const translations: Record<Language, Translations> = {
     suggestPremise: "Sugerir Premisa con IA",
 
     confirmMassGenerationTitle: "¿Generar Todas las Imágenes?",
-    confirmMassGenerationMessage: "¿Quieres generar las {count} imágenes para los personajes y planos ahora? Esto puede tomar tiempo y consumir cuota de API.",
+    confirmMassGenerationMessage: "La historia ha sido creada. ¿Quieres generar las imágenes para todos los personajes y planos ahora? Esto puede tomar tiempo.",
     confirmMassGenerationYes: "Sí, Generar Todas",
     confirmMassGenerationNo: "No, lo haré manualmente",
     
@@ -1451,9 +1450,9 @@ export const translations: Record<Language, Translations> = {
                 'Adulterio asesino', 'Locura', 'Imprudencia fatal', 'Crímenes involuntarios de amor',
                 'Asesinato de un pariente no reconocido', 'Auto-sacrificio por un ideal', 'Auto-sacrificio por parientes',
                 'Todo sacrificado por una pasión', 'Necesidad de sacrificar seres queridos', 'Rivalidad de superior e inferior',
-                'Adulterio', 'Crímenes de amor', 'Descubrimiento de la deshonra de un ser querido', 'Obstáculos al amor',
-                'Un enemigo amado', 'Ambition', 'Conflicto con un dios', 'Celos equivocados', 'Juicio erróneo',
-                'Remorse', 'Recovery of a Lost One', 'Pérdida de seres queridos'
+                'Adulterio', 'Crímenes de amor', 'Descubrimiento de la deshonra de un ser querido', 'Obstacles to Love',
+                'An Enemy Loved', 'Ambition', 'Conflicto con un dios', 'Celos equivocados', 'Juicio erróneo',
+                'Remordimiento', 'Recuperación de uno perdido', 'Pérdida de seres queridos'
             ],
             mckeeValues: [
                 'Vida / Muerte',

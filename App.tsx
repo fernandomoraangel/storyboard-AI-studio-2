@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LanguageContext, LanguageContextType } from './contexts/languageContext';
 import { translations, Language } from './lib/translations';
 import { Episode, Character, Scene, Shot, StoryboardStyle, ProjectState, Reference, ArcPoint, CustomStyle } from './types';
@@ -23,9 +23,9 @@ import { ModificationPreviewModal } from './components/ModificationPreviewModal'
 import { 
     LayoutGridIcon, FilmIcon, UserIcon, BookOpenIcon, VideoIcon, ChartBarIcon, 
     ActivityIcon, FloppyDiskIcon, FolderOpenIcon, TrashIcon, PlusIcon, 
-    ChevronLeftIcon, ChevronRightIcon 
+    ChevronLeftIcon, ChevronRightIcon, WandIcon, CloseIcon
 } from './components/icons';
-import { ensureStoryConsistency, modifyStory } from './services/geminiService';
+import { ensureStoryConsistency, modifyStory, createCharacterImagePrompt, createImagePromptForShot, generateImage } from './services/geminiService';
 
 // Basic ID generator
 const generateId = () => Date.now() + Math.random();
@@ -84,6 +84,12 @@ export const App: React.FC = () => {
   const [showModificationPreview, setShowModificationPreview] = useState(false);
   const [modificationPreviewData, setModificationPreviewData] = useState<{explanation: string, state: ProjectState} | null>(null);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
+  
+  // Mass Generation State
+  const [showGenerationOffer, setShowGenerationOffer] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenProgress, setRegenProgress] = useState({ current: 0, total: 0 });
+  const shouldStopGeneration = useRef(false);
   
   // Layout State
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -220,6 +226,69 @@ export const App: React.FC = () => {
       }
   };
 
+  const handleStopRegeneration = () => {
+      shouldStopGeneration.current = true;
+      setIsRegenerating(false);
+  };
+
+  const handleStartRegeneration = async () => {
+      setIsRegenerating(true);
+      shouldStopGeneration.current = false;
+      setShowGenerationOffer(false); // Hide modal if open
+
+      // Collect all jobs
+      const jobs: Array<() => Promise<void>> = [];
+
+      // Character Jobs
+      characters.forEach(char => {
+          jobs.push(async () => {
+              const prompt = createCharacterImagePrompt(char, storyboardStyle, aspectRatio);
+              try {
+                  const imageUrl = await generateImage(prompt);
+                  setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, images: [imageUrl, ...c.images] } : c));
+              } catch (e) {
+                  console.error(`Failed to regen character ${char.name}`, e);
+              }
+          });
+      });
+
+      // Shot Jobs
+      episodes.forEach(ep => {
+          ep.scenes.forEach(scene => {
+              scene.shots.forEach(shot => {
+                  jobs.push(async () => {
+                      const prompt = createImagePromptForShot(shot, scene, characters, storyboardStyle, aspectRatio);
+                      try {
+                          const imageUrl = await generateImage(prompt);
+                          setEpisodes(prevEps => prevEps.map(e => e.id === ep.id ? {
+                              ...e,
+                              scenes: e.scenes.map(s => s.id === scene.id ? {
+                                  ...s,
+                                  shots: s.shots.map(sh => sh.id === shot.id ? { ...sh, imageUrl } : sh)
+                              } : s)
+                          } : e));
+                      } catch (e) {
+                          console.error(`Failed to regen shot ${shot.id}`, e);
+                      }
+                  });
+              });
+          });
+      });
+
+      setRegenProgress({ current: 0, total: jobs.length });
+
+      for (let i = 0; i < jobs.length; i++) {
+          if (shouldStopGeneration.current) break;
+          await jobs[i]();
+          setRegenProgress(prev => ({ ...prev, current: i + 1 }));
+          // Small delay
+          await new Promise(resolve => setTimeout(resolve, 500)); 
+      }
+
+      setIsRegenerating(false);
+      shouldStopGeneration.current = false;
+  };
+
   const activeEpisode = episodes.find(e => e.id === activeEpisodeId);
 
   const menuItems = [
@@ -334,7 +403,7 @@ export const App: React.FC = () => {
             </aside>
 
             {/* MAIN WRAPPER */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 relative">
                 
                 {/* TOP HEADER */}
                 <header className="h-16 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-20">
@@ -399,10 +468,41 @@ export const App: React.FC = () => {
                                         episodes: preview.episodes.map((ep, i) => ({
                                             ...ep,
                                             id: generateId() + i,
-                                            scenes: ep.scenes.map((s, j) => ({ ...s, id: generateId() + j, shots: [] }))
+                                            scenes: ep.scenes.map((s, j) => ({
+                                                ...s,
+                                                id: generateId() + j,
+                                                // IMPORTANT: Map existing shots from generator or create default if missing
+                                                shots: (s.shots && s.shots.length > 0) ? s.shots.map((shot, k) => ({
+                                                    ...shot,
+                                                    id: generateId() + k,
+                                                    imageUrl: shot.imageUrl || null,
+                                                    videoUrl: shot.videoUrl || null
+                                                })) : [{
+                                                    id: generateId(),
+                                                    description: s.actions || 'Scene action',
+                                                    shotType: 'Wide Shot (WS)',
+                                                    cameraMovement: 'Static',
+                                                    cameraType: 'Digital Cinema Camera',
+                                                    lensType: 'Standard (35mm-50mm)',
+                                                    lensBlur: 'None',
+                                                    atmosphere: 'Neutral',
+                                                    lighting: 'Natural Light',
+                                                    style: 'Cinematic',
+                                                    technicalNotes: '',
+                                                    colorGrade: 'Neutral',
+                                                    filmGrain: 'None',
+                                                    filmStock: 'Digital',
+                                                    duration: 5,
+                                                    soundFx: '',
+                                                    notes: '',
+                                                    imageUrl: null,
+                                                    videoUrl: null
+                                                }]
+                                            }))
                                         }))
                                     });
                                     setWorkflowPhase('bible');
+                                    setShowGenerationOffer(true);
                                 }}
                             />
                         )}
@@ -536,6 +636,10 @@ export const App: React.FC = () => {
                                 onImportProject={applyState}
                                 onExportPDF={() => setShowPDFModal(true)}
                                 onExportAnimatic={() => setShowAnimaticModal(true)}
+                                isRegenerating={isRegenerating}
+                                regenerationProgress={regenProgress}
+                                onStartRegeneration={handleStartRegeneration}
+                                onStopRegeneration={handleStopRegeneration}
                             />
                         )}
                     </div>
@@ -637,6 +741,62 @@ export const App: React.FC = () => {
                         }}
                     />
                 )}
+
+                {/* Generation Offer Modal */}
+                {showGenerationOffer && (
+                    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-indigo-500/50">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-indigo-900/50 rounded-full">
+                                    <WandIcon className="w-6 h-6 text-indigo-400" />
+                                </div>
+                                <h3 className="text-xl font-bold text-white">{t('confirmMassGenerationTitle')}</h3>
+                            </div>
+                            <p className="text-gray-300 mb-6">
+                                {t('confirmMassGenerationMessage', { count: episodes.reduce((acc, ep) => acc + ep.scenes.reduce((sAcc, s) => sAcc + s.shots.length, 0), 0) + characters.length })}
+                            </p>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={() => setShowGenerationOffer(false)}
+                                    className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md text-sm font-medium transition-colors"
+                                >
+                                    {t('confirmMassGenerationNo')}
+                                </button>
+                                <button 
+                                    onClick={handleStartRegeneration}
+                                    className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
+                                >
+                                    {t('confirmMassGenerationYes')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Global Generation Progress Overlay */}
+                {isRegenerating && (
+                    <div className="fixed bottom-6 right-6 z-50 bg-gray-800 border border-indigo-500/50 rounded-lg shadow-2xl p-4 w-80 animate-fade-in-up">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                                <WandIcon className="w-4 h-4 text-indigo-400 animate-pulse" />
+                                {t('generating')}
+                            </h4>
+                            <button onClick={handleStopRegeneration} className="text-xs text-red-400 hover:text-red-300 font-medium">
+                                {t('stopRegeneration')}
+                            </button>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mb-1">
+                            <div 
+                                className="bg-indigo-500 h-2 rounded-full transition-all duration-300" 
+                                style={{ width: `${(regenProgress.current / Math.max(1, regenProgress.total)) * 100}%` }}
+                            ></div>
+                        </div>
+                        <div className="text-right text-xs text-gray-400">
+                            {regenProgress.current} / {regenProgress.total}
+                        </div>
+                    </div>
+                )}
+
             </div>
         </div>
     </LanguageContext.Provider>

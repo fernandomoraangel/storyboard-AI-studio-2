@@ -5,6 +5,10 @@
 
 
 
+
+
+
+
 import React, { useState, useRef, useEffect } from 'react';
 import type { Scene, Character, Reference, ArcPoint, Episode } from '../types';
 import { generateStory, generateQuickText } from '../services/geminiService';
@@ -288,9 +292,9 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({ onStoryGenerated
         const activeSteps = configSteps.filter(s => s.enabled);
         
         // CRITICAL: Force essential steps to ensure the Gemini service receives expected data.
-        // Without 'progressGeneratingCore', 'progressOutliningEpisodes', and 'progressOutliningScenes',
+        // Without 'progressGeneratingCore', 'progressOutliningEpisodes', 'progressOutliningScenes', and 'progressGeneratingShots',
         // the data structure is incomplete and the process fails.
-        const mandatorySteps = ['progressGeneratingCore', 'progressOutliningEpisodes', 'progressOutliningScenes'];
+        const mandatorySteps = ['progressGeneratingCore', 'progressOutliningEpisodes', 'progressOutliningScenes', 'progressGeneratingShots', 'progressGeneratingAnalysis'];
         const finalPlan: string[] = [];
         
         // Reconstruct plan preserving order, ensuring mandatory steps are present

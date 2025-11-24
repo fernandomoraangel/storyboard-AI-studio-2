@@ -4,7 +4,6 @@ import { useLanguage } from '../contexts/languageContext';
 import { ChartBarIcon, RefreshCwIcon, WandIcon, DownloadIcon, UploadIcon, FloppyDiskIcon, VideoIcon, BookOpenIcon } from './icons';
 import { LoadingSpinner } from './LoadingSpinner';
 import type { Episode, Character, StoryboardStyle, ProjectState } from '../types';
-import { createCharacterImagePrompt, createImagePromptForShot, generateImage } from '../services/geminiService';
 import JSZip from 'jszip';
 
 interface UtilitiesProps {
@@ -18,17 +17,21 @@ interface UtilitiesProps {
     onImportProject: (state: ProjectState) => void;
     onExportPDF: () => void;
     onExportAnimatic: () => void;
+    
+    // New Props for handling regeneration state from parent (App.tsx)
+    isRegenerating: boolean;
+    regenerationProgress: { current: number; total: number };
+    onStartRegeneration: () => void;
+    onStopRegeneration: () => void;
 }
 
 export const Utilities: React.FC<UtilitiesProps> = ({ 
-    episodes, characters, setEpisodes, setCharacters, storyboardStyle, aspectRatio, onGetProjectState, onImportProject, onExportPDF, onExportAnimatic
+    episodes, characters, setEpisodes, setCharacters, storyboardStyle, aspectRatio, onGetProjectState, onImportProject, onExportPDF, onExportAnimatic,
+    isRegenerating, regenerationProgress, onStartRegeneration, onStopRegeneration
 }) => {
     const { t } = useLanguage();
     const [tokenCount, setTokenCount] = useState(0);
     const [imageCount, setImageCount] = useState(0);
-    const [isRegenerating, setIsRegenerating] = useState(false);
-    const [regenProgress, setRegenProgress] = useState({ current: 0, total: 0 });
-    const [shouldStop, setShouldStop] = useState(false);
     
     // Import/Export State
     const [isExporting, setIsExporting] = useState(false);
@@ -65,73 +68,6 @@ export const Utilities: React.FC<UtilitiesProps> = ({
         
         return () => window.removeEventListener('imageGenerated', handleImageGenerated);
     }, [episodes, characters]);
-
-    // 2. Regenerate Logic
-    const handleRegenerateAll = async () => {
-        if (!window.confirm(t('regenerateAllDescription'))) return;
-        
-        setIsRegenerating(true);
-        setShouldStop(false);
-
-        // Collect all jobs
-        const jobs: Array<() => Promise<void>> = [];
-
-        // Character Jobs
-        characters.forEach(char => {
-            jobs.push(async () => {
-                const prompt = createCharacterImagePrompt(char, storyboardStyle, aspectRatio);
-                try {
-                    const imageUrl = await generateImage(prompt);
-                    setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, images: [imageUrl, ...c.images] } : c));
-                } catch (e) {
-                    console.error(`Failed to regen character ${char.name}`, e);
-                }
-            });
-        });
-
-        // Shot Jobs
-        episodes.forEach(ep => {
-            ep.scenes.forEach(scene => {
-                scene.shots.forEach(shot => {
-                    jobs.push(async () => {
-                        const prompt = createImagePromptForShot(shot, scene, characters, storyboardStyle, aspectRatio);
-                        try {
-                            const imageUrl = await generateImage(prompt);
-                            setEpisodes(prevEps => prevEps.map(e => e.id === ep.id ? {
-                                ...e,
-                                scenes: e.scenes.map(s => s.id === scene.id ? {
-                                    ...s,
-                                    shots: s.shots.map(sh => sh.id === shot.id ? { ...sh, imageUrl } : sh)
-                                } : s)
-                            } : e));
-                        } catch (e) {
-                            console.error(`Failed to regen shot ${shot.id}`, e);
-                        }
-                    });
-                });
-            });
-        });
-
-        setRegenProgress({ current: 0, total: jobs.length });
-
-        // Execute sequentially to avoid rate limits, but maybe batch slightly?
-        // Let's stick to sequential for safety with `shouldStop` check.
-        for (let i = 0; i < jobs.length; i++) {
-            if (shouldStop) break;
-            await jobs[i]();
-            setRegenProgress(prev => ({ ...prev, current: i + 1 }));
-            // Small delay to be nice to the API
-            await new Promise(resolve => setTimeout(resolve, 500)); 
-        }
-
-        setIsRegenerating(false);
-        setShouldStop(false);
-    };
-
-    const handleStop = () => {
-        setShouldStop(true);
-        setIsRegenerating(false); // Force UI update immediately
-    };
 
     // --- IMPORT / EXPORT LOGIC ---
 
@@ -499,16 +435,16 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                     <div className="space-y-4">
                         <div className="flex justify-between text-sm text-gray-300">
                             <span>{t('regenerationProgress')}</span>
-                            <span>{regenProgress.current} / {regenProgress.total}</span>
+                            <span>{regenerationProgress.current} / {regenerationProgress.total}</span>
                         </div>
                         <div className="w-full bg-gray-700 rounded-full h-4">
                             <div 
                                 className="bg-indigo-600 h-4 rounded-full transition-all duration-300" 
-                                style={{ width: `${(regenProgress.current / Math.max(1, regenProgress.total)) * 100}%` }}
+                                style={{ width: `${(regenerationProgress.current / Math.max(1, regenerationProgress.total)) * 100}%` }}
                             ></div>
                         </div>
                         <button 
-                            onClick={handleStop}
+                            onClick={onStopRegeneration}
                             className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors"
                         >
                             {t('stopRegeneration')}
@@ -516,7 +452,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                     </div>
                 ) : (
                     <button 
-                        onClick={handleRegenerateAll}
+                        onClick={onStartRegeneration}
                         className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md font-medium transition-colors shadow-lg hover:shadow-indigo-500/30"
                     >
                         <RefreshCwIcon className="w-5 h-5" />

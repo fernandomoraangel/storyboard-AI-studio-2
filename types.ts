@@ -73,9 +73,12 @@ export type StoryboardStyle = 'Cinematic' | 'Sketch' | 'ComicBook' | 'Anime' | '
 export interface ArcPoint {
     id: number;
     label: string; // "Episode 1", "Scene 1", etc.
+    x?: number; // Horizontal position 0-100
     tension: number; // 0-10
     emotion: number; // 0-10
     conflict: number; // 0-10
+    modifiedCurves?: ('tension' | 'emotion' | 'conflict')[]; // Tracks which curves have active nodes at this point
+    isEpisodeAnchor?: boolean; // True if this point represents a fixed episode/structural anchor
 }
 
 export interface ProjectState {

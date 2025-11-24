@@ -2,6 +2,8 @@
 
 
 
+
+
 export type Language = 'en' | 'es';
 
 export type Options = {
@@ -183,6 +185,7 @@ export const translations: Record<Language, Translations> = {
     arcNoData: "No arc data available. Generate a story first.",
     rewriteStoryFromArc: "Update Story from Arc",
     rewritingStory: "Rewriting Story...",
+    resetArc: "Reset Arc",
 
     // Visual Organizer
     visualOrganizerTitle: "Visual Organizer",
@@ -911,6 +914,7 @@ export const translations: Record<Language, Translations> = {
     arcNoData: "No hay datos de arco disponibles. Genera una historia primero.",
     rewriteStoryFromArc: "Actualizar Historia desde el Arco",
     rewritingStory: "Reescribiendo Historia...",
+    resetArc: "Resetear Arco",
 
     // Visual Organizer
     visualOrganizerTitle: "Organizador Visual",

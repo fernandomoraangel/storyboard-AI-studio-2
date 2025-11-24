@@ -1,9 +1,4 @@
 
-
-
-
-
-
 import { GoogleGenAI, Chat, GenerateContentResponse, Type, FunctionDeclaration, Part, FunctionCall, Modality } from "@google/genai";
 import type { Character, Scene, Reference, Shot, StoryboardStyle, ArcPoint, ProjectState } from '../types';
 import type { Language } from "../lib/translations";
@@ -565,7 +560,13 @@ export const generateStory = async (
                    }
                 });
                 const arcData = JSON.parse(cleanJson(arcResponse.text.trim())).points;
-                context.narrativeArc = arcData.map((p: any, i: number) => ({ ...p, id: i }));
+                context.narrativeArc = arcData.map((p: any, i: number) => ({ 
+                    ...p, 
+                    id: i, 
+                    x: (i / (Math.max(1, arcData.length - 1))) * 100,
+                    modifiedCurves: ['tension', 'emotion', 'conflict'],
+                    isEpisodeAnchor: true 
+                }));
              } catch (e) {
                  console.warn("Failed to generate narrative arc, skipping this step.", e);
                  context.narrativeArc = [];

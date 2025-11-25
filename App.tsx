@@ -800,7 +800,8 @@ export const App: React.FC = () => {
                                     structuralAnalysis,
                                     treatment,
                                     references,
-                                    narrativeArc, // Pass narrative arc here
+                                    narrativeArc, 
+                                    authors, // Pass authors
                                     opts
                                 );
                                 setShowPDFModal(false);

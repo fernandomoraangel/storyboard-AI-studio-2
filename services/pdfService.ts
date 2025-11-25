@@ -1,286 +1,624 @@
 
 import { jsPDF } from 'jspdf';
-import type { Scene, Character, Shot, Reference, Episode, ArcPoint } from '../types';
+import type { Scene, Character, Shot, Reference, Episode, ArcPoint, Author } from '../types';
 import type { PDFExportOptions } from '../components/PDFExportModal';
 
-// --- CONSTANTS & THEME ---
-const MARGIN = 15;
-const PAGE_HEIGHT = 297; // A4 mm
-const PAGE_WIDTH = 210;  // A4 mm
-const CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2);
+// --- CONFIGURACIÓN Y ESTILOS ---
+const CONFIG = {
+    MARGIN: 15,
+    PAGE_HEIGHT: 297, // A4 mm
+    PAGE_WIDTH: 210,  // A4 mm
+    CONTENT_WIDTH: 180, // 210 - (15 * 2)
+    COL_GAP: 6,
+    ROW_GAP: 10,
+    HEADER_HEIGHT: 15,
+    FOOTER_HEIGHT: 10,
+};
 
 const COLORS = {
-    BLACK: '#111827',
-    GRAY_DARK: '#374151',   
-    GRAY_MEDIUM: '#6b7280', 
-    GRAY_LIGHT: '#d1d5db',  
-    BG_LIGHT: '#f3f4f6',    
-    ACCENT: '#4f46e5',      
-    BORDER: '#e5e7eb',
+    TEXT_MAIN: '#1f2937',    // Gray 800
+    TEXT_SEC: '#4b5563',     // Gray 600
+    TEXT_LIGHT: '#9ca3af',   // Gray 400
+    ACCENT: '#374151',       // Gray 700 (Elegant dark)
+    ACCENT_BLUE: '#2563eb',  // Royal Blue
+    BG_BOX: '#f3f4f6',       // Gray 100
+    BORDER: '#e5e7eb',       // Gray 200
+    SCENE_BG: '#111827',     // Gray 900 (Header de escena)
 };
 
 const FONTS = {
-    TITLE: 22,
-    HEADER: 14,
-    SUBHEADER: 11,
-    BODY: 9,
-    SMALL: 8,
-    TINY: 7
+    TITLE: { size: 24, weight: 'bold' },
+    SUBTITLE: { size: 16, weight: 'bold' },
+    SECTION: { size: 14, weight: 'bold' },
+    BODY: { size: 10, weight: 'normal' },
+    SMALL: { size: 8, weight: 'normal' },
+    TINY: { size: 7, weight: 'normal' },
 };
 
-// --- HELPER FUNCTIONS ---
+// --- CLASE GESTORA DEL DOCUMENTO ---
+class PDFGenerator {
+    doc: jsPDF;
+    y: number;
+    t: (key: string) => string;
 
-// Estimate text height without drawing
-const getTextHeight = (doc: jsPDF, text: string, maxWidth: number, fontSize: number, lineHeightFactor: number = 1.2): number => {
-    if (!text) return 0;
-    doc.setFontSize(fontSize);
-    const lines = doc.splitTextToSize(text, maxWidth);
-    // 1 pt = 0.3527 mm
-    return lines.length * (fontSize * 0.3527 * lineHeightFactor);
-};
+    constructor(t: (key: string) => string) {
+        this.doc = new jsPDF();
+        this.y = CONFIG.MARGIN;
+        this.t = t;
+    }
 
-// Draw wrapped text and return new Y position
-const printWrappedText = (
-    doc: jsPDF, 
-    text: string, 
-    x: number, 
-    y: number, 
-    maxWidth: number, 
-    fontSize: number, 
-    fontStyle: 'normal' | 'bold' | 'italic' = 'normal', 
-    color: string = COLORS.BLACK,
-    align: 'left' | 'center' | 'right' | 'justify' = 'left'
-): number => {
-    if (!text) return y;
-    
-    doc.setFontSize(fontSize);
-    doc.setFont('helvetica', fontStyle);
-    doc.setTextColor(color);
-    
-    const lines = doc.splitTextToSize(text, maxWidth);
-    const lineHeight = fontSize * 0.3527 * 1.2;
-    
-    doc.text(lines, x, y + (fontSize * 0.3527), { align, maxWidth }); // + adjustment for baseline
-    return y + (lines.length * lineHeight);
-};
+    // --- UTILIDADES DE TEXTO Y MEDIDAS ---
 
-// --- COMPONENT DRAWERS ---
+    // Convierte pt a mm para cálculos de altura de línea
+    getLineHeight(fontSize: number) {
+        return fontSize * 0.3527 * 1.25; // Factor 1.25 para interlineado cómodo
+    }
 
-const drawNarrativeArc = (doc: jsPDF, arc: ArcPoint[], startY: number, width: number): number => {
-    if (!arc || arc.length === 0) return startY;
+    // Mide la altura que ocupará un bloque de texto
+    measureText(text: string, fontSize: number, maxWidth: number): number {
+        if (!text) return 0;
+        this.doc.setFontSize(fontSize);
+        const lines = this.doc.splitTextToSize(text, maxWidth);
+        return lines.length * this.getLineHeight(fontSize);
+    }
 
-    let y = startY;
-    const height = 45;
-    const bottomY = y + height;
-    
-    // Container
-    doc.setDrawColor(COLORS.GRAY_LIGHT);
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(MARGIN, y, width, height + 15, 2, 2, 'FD');
-    
-    // Title
-    doc.setFontSize(FONTS.SMALL);
-    doc.setTextColor(COLORS.GRAY_MEDIUM);
-    doc.text("Narrative Arc", MARGIN + 5, y + 5);
+    // Verifica si hay espacio, si no, crea nueva página
+    // safeZone: espacio extra requerido (para evitar dejar un título solo al final)
+    checkPageBreak(heightNeeded: number) {
+        const limit = CONFIG.PAGE_HEIGHT - CONFIG.MARGIN - CONFIG.FOOTER_HEIGHT;
+        if (this.y + heightNeeded > limit) {
+            this.doc.addPage();
+            this.y = CONFIG.MARGIN;
+            return true;
+        }
+        return false;
+    }
 
-    y += 5;
-
-    // Axes
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.5);
-    doc.line(MARGIN + 10, bottomY, MARGIN + width - 10, bottomY); // X
-    doc.line(MARGIN + 10, y + 5, MARGIN + 10, bottomY); // Y
-
-    // Plotting
-    const maxX = 100;
-    const maxY = 10;
-    const plotW = width - 20;
-    const plotX = MARGIN + 10;
-    
-    const getX = (val: number) => plotX + (val / maxX) * plotW;
-    const getY = (val: number) => bottomY - (val / maxY) * (height - 5);
-
-    const sorted = [...arc].sort((a, b) => (a.x || 0) - (b.x || 0));
-
-    const drawCurve = (key: 'tension' | 'emotion' | 'conflict', color: string) => {
-        doc.setDrawColor(color);
-        doc.setLineWidth(0.7);
-        let lastX = -1, lastY = -1;
+    // Dibuja texto y avanza Y
+    printText(text: string, fontSize: number, weight: 'normal' | 'bold' | 'italic', color: string, maxWidth: number, align: 'left' | 'center' | 'right' = 'left') {
+        if (!text) return;
         
-        sorted.forEach(p => {
-            const px = getX(p.x || 0);
-            const py = getY((p as any)[key]);
+        this.doc.setFontSize(fontSize);
+        this.doc.setFont('helvetica', weight);
+        this.doc.setTextColor(color);
+
+        const lines = this.doc.splitTextToSize(text, maxWidth);
+        const lineHeight = this.getLineHeight(fontSize);
+
+        // Ajuste de X según alineación
+        let x = CONFIG.MARGIN;
+        if (align === 'center') x = CONFIG.PAGE_WIDTH / 2;
+        if (align === 'right') x = CONFIG.PAGE_WIDTH - CONFIG.MARGIN;
+
+        this.doc.text(lines, x, this.y + (lineHeight * 0.7), { align, maxWidth });
+        this.y += lines.length * lineHeight;
+    }
+
+    // Dibuja una línea divisoria
+    drawDivider(spaceAfter: number = 5) {
+        this.y += 2;
+        this.doc.setDrawColor(COLORS.BORDER);
+        this.doc.setLineWidth(0.1);
+        this.doc.line(CONFIG.MARGIN, this.y, CONFIG.PAGE_WIDTH - CONFIG.MARGIN, this.y);
+        this.y += spaceAfter;
+    }
+
+    // --- COMPONENTES ---
+
+    drawCover(title: string, author: string, stats: {episodes: number, characters: number}) {
+        this.y = 80;
+        
+        // Título Principal
+        this.printText(title.toUpperCase(), 32, 'bold', COLORS.TEXT_MAIN, CONFIG.CONTENT_WIDTH, 'center');
+        this.y += 10;
+
+        // Autor Principal
+        if (author) {
+            this.printText(this.t('pdfByAuthor').replace('{authorName}', author), 14, 'normal', COLORS.TEXT_SEC, CONFIG.CONTENT_WIDTH, 'center');
+        }
+
+        this.y = 220;
+        
+        // Caja de Metadatos
+        this.doc.setDrawColor(COLORS.BORDER);
+        this.doc.line(CONFIG.PAGE_WIDTH/2 - 40, this.y, CONFIG.PAGE_WIDTH/2 + 40, this.y);
+        this.y += 10;
+        
+        this.printText(`${this.t('episodes')}: ${stats.episodes}`, 10, 'bold', COLORS.TEXT_MAIN, CONFIG.CONTENT_WIDTH, 'center');
+        this.printText(`${this.t('characters')}: ${stats.characters}`, 10, 'bold', COLORS.TEXT_MAIN, CONFIG.CONTENT_WIDTH, 'center');
+        this.printText(`${this.t('pdfGeneratedOn')} ${new Date().toLocaleDateString()}`, 9, 'normal', COLORS.TEXT_LIGHT, CONFIG.CONTENT_WIDTH, 'center');
+
+        this.doc.addPage();
+        this.y = CONFIG.MARGIN;
+    }
+
+    drawAuthors(authors: Author[]) {
+        if (!authors || authors.length === 0) return;
+
+        this.drawSectionTitle(this.t('authorsTitle'));
+        
+        // Table Header
+        this.doc.setFillColor(COLORS.BG_BOX);
+        this.doc.rect(CONFIG.MARGIN, this.y, CONFIG.CONTENT_WIDTH, 8, 'F');
+        this.doc.setFontSize(8);
+        this.doc.setFont('helvetica', 'bold');
+        this.doc.setTextColor(COLORS.TEXT_SEC);
+        
+        const cols = { name: 5, role: 60, email: 110, part: 160 };
+        this.doc.text(this.t('authorName').toUpperCase(), CONFIG.MARGIN + cols.name, this.y + 5.5);
+        this.doc.text(this.t('authorRole').toUpperCase(), CONFIG.MARGIN + cols.role, this.y + 5.5);
+        this.doc.text(this.t('email').toUpperCase(), CONFIG.MARGIN + cols.email, this.y + 5.5);
+        this.doc.text("%", CONFIG.MARGIN + cols.part, this.y + 5.5);
+        
+        this.y += 10;
+
+        authors.forEach((author, idx) => {
+            this.doc.setFontSize(9);
+            this.doc.setFont('helvetica', 'bold');
+            this.doc.setTextColor(COLORS.TEXT_MAIN);
+            this.doc.text(author.name, CONFIG.MARGIN + cols.name, this.y);
             
-            if (lastX !== -1) {
-                doc.line(lastX, lastY, px, py);
-            }
-            lastX = px;
-            lastY = py;
+            this.doc.setFont('helvetica', 'normal');
+            this.doc.text(author.role, CONFIG.MARGIN + cols.role, this.y);
             
-            // Dot
-            doc.setFillColor(color);
-            doc.circle(px, py, 0.8, 'F');
+            this.doc.setTextColor(COLORS.TEXT_SEC);
+            this.doc.text(author.email, CONFIG.MARGIN + cols.email, this.y);
+            
+            this.doc.text(author.participation ? `${author.participation}%` : '-', CONFIG.MARGIN + cols.part, this.y);
+            
+            this.doc.setDrawColor(COLORS.BORDER);
+            this.doc.line(CONFIG.MARGIN, this.y + 3, CONFIG.MARGIN + CONFIG.CONTENT_WIDTH, this.y + 3);
+            
+            this.y += 8;
         });
-    };
 
-    drawCurve('tension', '#ef4444');
-    drawCurve('emotion', '#06b6d4');
-    drawCurve('conflict', '#f59e0b');
-
-    // Legend
-    const legY = bottomY + 8;
-    doc.setFontSize(FONTS.TINY);
-    doc.setTextColor('#ef4444'); doc.text("● Tension", MARGIN + 15, legY);
-    doc.setTextColor('#06b6d4'); doc.text("● Emotion", MARGIN + 45, legY);
-    doc.setTextColor('#f59e0b'); doc.text("● Conflict", MARGIN + 75, legY);
-
-    return bottomY + 20; 
-};
-
-const getValidTechFields = (shot: Shot, t: (key: string) => string) => {
-    return [
-        { l: t('cameraMovement'), v: shot.cameraMovement },
-        { l: t('cameraType'), v: shot.cameraType },
-        { l: t('lensType'), v: shot.lensType },
-        { l: t('lightingScheme'), v: shot.lighting },
-        { l: t('soundFx'), v: shot.soundFx },
-        { l: t('style'), v: shot.style },
-        { l: t('atmosphere'), v: shot.atmosphere },
-    ].filter(f => f.v && f.v !== 'None' && f.v !== 'Unassigned' && f.v !== 'Default' && f.v !== 'N/A');
-};
-
-const calculateShotHeight = (doc: jsPDF, shot: Shot, width: number, includeTech: boolean, t: (key: string) => string): number => {
-    const imgHeight = width * (9/16);
-    const headerHeight = 10; // Shot type + duration
-    const descHeight = getTextHeight(doc, shot.description, width, FONTS.BODY) + 5;
-    
-    let techHeight = 0;
-    if (includeTech) {
-        const validFields = getValidTechFields(shot, t);
-        if (validFields.length > 0) {
-            const boxPadding = 3;
-            const rowHeight = 4;
-            const rows = Math.ceil(validFields.length / 2); 
-            const boxHeight = (rows * rowHeight) + (boxPadding * 2) + 2;
-            techHeight = boxHeight + 4; // + margin
-        }
+        this.y += 10;
     }
-    
-    return imgHeight + headerHeight + descHeight + techHeight + 5; // + padding
-};
 
-const drawShotCard = (
-    doc: jsPDF, 
-    shot: Shot, 
-    index: number, 
-    x: number, 
-    y: number, 
-    width: number, 
-    t: (key: string) => string,
-    options: PDFExportOptions
-): number => {
-    const startY = y;
-    let currentY = y;
-
-    // 1. IMAGE
-    const imgHeight = width * (9/16);
-    doc.setFillColor(240, 240, 240);
-    doc.rect(x, currentY, width, imgHeight, 'F'); // Placeholder
-
-    if (shot.imageUrl && shot.imageUrl.startsWith('data:')) {
-        try {
-            doc.addImage(shot.imageUrl, 'PNG', x, currentY, width, imgHeight, undefined, 'FAST');
-        } catch (e) {
-            // Fallback text if image fails (e.g. corrupt base64)
-            doc.setFontSize(FONTS.TINY);
-            doc.setTextColor(COLORS.GRAY_MEDIUM);
-            doc.text(t('pdfImageNotAvailable'), x + width/2, currentY + imgHeight/2, { align: 'center' });
-        }
-    } else {
-        doc.setFontSize(FONTS.TINY);
-        doc.setTextColor(COLORS.GRAY_MEDIUM);
-        doc.text(t('noImage'), x + width/2, currentY + imgHeight/2, { align: 'center' });
+    drawSectionTitle(title: string) {
+        this.checkPageBreak(30); // Asegurar que el título no quede solo
+        this.y += 5;
+        this.doc.setFillColor(COLORS.ACCENT_BLUE);
+        this.doc.rect(CONFIG.MARGIN, this.y, 5, 10, 'F'); // Decoración lateral
+        
+        this.doc.setFontSize(FONTS.TITLE.size);
+        this.doc.setFont('helvetica', 'bold');
+        this.doc.setTextColor(COLORS.TEXT_MAIN);
+        this.doc.text(title.toUpperCase(), CONFIG.MARGIN + 8, this.y + 8);
+        
+        this.y += 18;
     }
-    
-    // Shot Number Tag
-    doc.setFillColor(COLORS.ACCENT);
-    doc.rect(x, currentY, 12, 6, 'F');
-    doc.setTextColor('#FFFFFF');
-    doc.setFontSize(FONTS.TINY);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${index}`, x + 6, currentY + 4, { align: 'center' });
 
-    // Duration Tag
-    doc.setFillColor(COLORS.BLACK); // Use solid black instead of rgba
-    const durText = `${shot.duration}s`;
-    const durW = doc.getTextWidth(durText) + 4;
-    doc.rect(x + width - durW, currentY + imgHeight - 6, durW, 6, 'F');
-    doc.text(durText, x + width - durW/2, currentY + imgHeight - 2, { align: 'center' });
+    drawBible(logline: string, treatment: string, structuralAnalysis: string, narrativeArc: ArcPoint[]) {
+        this.drawSectionTitle(this.t('outlineTab'));
 
-    currentY += imgHeight + 4;
+        // Logline
+        if (logline) {
+            this.printText(this.t('logline').toUpperCase(), FONTS.BODY.size, 'bold', COLORS.ACCENT_BLUE, CONFIG.CONTENT_WIDTH);
+            this.y += 2;
+            this.printText(logline, 11, 'italic', COLORS.TEXT_MAIN, CONFIG.CONTENT_WIDTH);
+            this.y += 10;
+        }
 
-    // 2. HEADER
-    doc.setTextColor(COLORS.ACCENT);
-    doc.setFontSize(FONTS.BODY);
-    doc.setFont('helvetica', 'bold');
-    doc.text(shot.shotType || t('shot'), x, currentY);
-    currentY += 5;
+        // Arco Narrativo (Gráfico Simplificado)
+        if (narrativeArc && narrativeArc.length > 0) {
+            this.checkPageBreak(60);
+            this.printText(this.t('narrativeArcTitle').toUpperCase(), FONTS.BODY.size, 'bold', COLORS.ACCENT_BLUE, CONFIG.CONTENT_WIDTH);
+            this.y += 5;
+            this.drawGraph(narrativeArc);
+            this.y += 10;
+        }
 
-    // 3. DESCRIPTION
-    currentY = printWrappedText(doc, shot.description, x, currentY, width, FONTS.BODY, 'normal', COLORS.BLACK);
-    currentY += 2;
+        // Tratamiento
+        if (treatment) {
+            this.checkPageBreak(50);
+            this.printText(this.t('treatment').toUpperCase(), FONTS.BODY.size, 'bold', COLORS.ACCENT_BLUE, CONFIG.CONTENT_WIDTH);
+            this.y += 2;
+            this.printText(treatment, FONTS.BODY.size, 'normal', COLORS.TEXT_SEC, CONFIG.CONTENT_WIDTH);
+            this.y += 10;
+        }
 
-    // 4. TECHNICAL DETAILS
-    if (options.includeTechDetails) {
-        const techFields = getValidTechFields(shot, t);
+        // Análisis Estructural
+        if (structuralAnalysis) {
+            this.checkPageBreak(50);
+            this.printText(this.t('structuralAnalysis').toUpperCase(), FONTS.BODY.size, 'bold', COLORS.ACCENT_BLUE, CONFIG.CONTENT_WIDTH);
+            this.y += 2;
+            this.printText(structuralAnalysis, FONTS.BODY.size, 'normal', COLORS.TEXT_SEC, CONFIG.CONTENT_WIDTH);
+        }
 
-        if (techFields.length > 0) {
-            // Background box
-            const boxPadding = 3;
-            const rowHeight = 4;
-            // Calculate box height based on items
-            const rows = Math.ceil(techFields.length / 2); // 2 cols
-            const boxHeight = (rows * rowHeight) + (boxPadding * 2) + 2;
+        this.doc.addPage();
+        this.y = CONFIG.MARGIN;
+    }
 
-            doc.setFillColor(COLORS.BG_LIGHT);
-            doc.roundedRect(x, currentY, width, boxHeight, 1, 1, 'F');
-            
-            let innerY = currentY + boxPadding + 3;
-            const colW = (width - (boxPadding*2)) / 2;
+    drawGraph(arc: ArcPoint[]) {
+        const height = 40;
+        const width = CONFIG.CONTENT_WIDTH;
+        const bottomY = this.y + height;
+        
+        // Fondo
+        this.doc.setFillColor(COLORS.BG_BOX);
+        this.doc.rect(CONFIG.MARGIN, this.y, width, height, 'F');
 
-            techFields.forEach((field, idx) => {
-                const isRight = idx % 2 !== 0;
-                const colX = isRight ? x + boxPadding + colW : x + boxPadding;
-                
-                // Label
-                doc.setFontSize(FONTS.TINY);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(COLORS.GRAY_MEDIUM);
-                doc.text(field.l.substring(0, 12) + ":", colX, innerY);
-                
-                // Value
-                doc.setTextColor(COLORS.GRAY_DARK);
-                doc.setFont('helvetica', 'normal');
-                const valX = colX + doc.getTextWidth(field.l.substring(0, 12) + ": ");
-                
-                // Simple truncation
-                let valText = field.v;
-                if (doc.getTextWidth(valText) > (colW - 25)) {
-                    valText = valText.substring(0, 15) + "...";
-                }
-                doc.text(valText, valX, innerY);
+        // Ejes
+        this.doc.setDrawColor(COLORS.BORDER);
+        this.doc.line(CONFIG.MARGIN, bottomY, CONFIG.MARGIN + width, bottomY);
 
-                if (isRight) innerY += rowHeight;
+        const sorted = [...arc].sort((a, b) => (a.x || 0) - (b.x || 0));
+        const getX = (val: number) => CONFIG.MARGIN + (val / 100) * width;
+        const getY = (val: number) => bottomY - (val / 10) * height;
+
+        // Dibujar curvas
+        const drawCurve = (key: 'tension' | 'emotion' | 'conflict', color: string) => {
+            this.doc.setDrawColor(color);
+            this.doc.setLineWidth(0.5);
+            let lastX = -1, lastY = -1;
+            sorted.forEach(p => {
+                const px = getX(p.x || 0);
+                const py = getY((p as any)[key]);
+                if (lastX !== -1) this.doc.line(lastX, lastY, px, py);
+                lastX = px; lastY = py;
             });
+        };
+
+        drawCurve('tension', '#ef4444');
+        drawCurve('emotion', '#06b6d4');
+        drawCurve('conflict', '#f59e0b');
+
+        this.y += height + 5;
+    }
+
+    drawCharacters(characters: Character[]) {
+        if (characters.length === 0) return;
+        this.drawSectionTitle(this.t('characters'));
+
+        characters.forEach((char, index) => {
+            // Calcular altura necesaria
+            const descHeight = this.measureText(char.personality, 9, 110) + this.measureText(char.appearance, 9, 110) + 40;
+            const neededHeight = Math.max(60, descHeight);
+
+            this.checkPageBreak(neededHeight + 10);
+
+            // Contenedor
+            this.doc.setDrawColor(COLORS.BORDER);
+            this.doc.setFillColor(255, 255, 255);
+            this.doc.roundedRect(CONFIG.MARGIN, this.y, CONFIG.CONTENT_WIDTH, neededHeight, 2, 2, 'FD');
+
+            // Imagen (Izquierda)
+            const imgW = 40;
+            const imgH = 55;
+            if (char.images.length > 0 && char.images[0].startsWith('data:')) {
+                try {
+                    this.doc.addImage(char.images[0], 'PNG', CONFIG.MARGIN + 3, this.y + 3, imgW, imgH, undefined, 'FAST');
+                } catch(e) {}
+            } else {
+                this.doc.setFillColor(COLORS.BG_BOX);
+                this.doc.rect(CONFIG.MARGIN + 3, this.y + 3, imgW, imgH, 'F');
+            }
+
+            // Texto (Derecha)
+            const textX = CONFIG.MARGIN + imgW + 8;
+            const textW = CONFIG.CONTENT_WIDTH - imgW - 12;
+            let localY = this.y + 8;
+
+            this.doc.setFontSize(14);
+            this.doc.setFont('helvetica', 'bold');
+            this.doc.setTextColor(COLORS.TEXT_MAIN);
+            this.doc.text(char.name, textX, localY);
             
-            currentY += boxHeight + 4;
+            localY += 5;
+            this.doc.setFontSize(10);
+            this.doc.setFont('helvetica', 'italic');
+            this.doc.setTextColor(COLORS.TEXT_LIGHT);
+            this.doc.text(char.role, textX, localY);
+
+            localY += 8;
+            
+            const printField = (label: string, val: string) => {
+                if (!val) return;
+                this.doc.setFontSize(9);
+                this.doc.setFont('helvetica', 'bold');
+                this.doc.setTextColor(COLORS.TEXT_SEC);
+                this.doc.text(label + ": ", textX, localY);
+                const labelW = this.doc.getTextWidth(label + ": ");
+                
+                this.doc.setFont('helvetica', 'normal');
+                const lines = this.doc.splitTextToSize(val, textW - labelW);
+                this.doc.text(lines, textX + labelW, localY);
+                localY += (lines.length * 4) + 2;
+            };
+
+            printField(this.t('pdfPersonality'), char.personality);
+            printField(this.t('pdfAppearance'), char.appearance);
+            printField(this.t('characterOutfit'), char.outfit);
+
+            this.y += neededHeight + 5;
+        });
+
+        this.doc.addPage();
+        this.y = CONFIG.MARGIN;
+    }
+
+    // --- STORYBOARD (GRID COMPLEX) ---
+
+    drawEpisodes(episodes: Episode[], includeTech: boolean, activeEpId: number | null, allEps: boolean) {
+        const epsToDraw = allEps ? episodes : episodes.filter(e => e.id === activeEpId);
+
+        epsToDraw.forEach(ep => {
+            if (this.y > CONFIG.MARGIN) this.doc.addPage();
+            this.y = CONFIG.MARGIN;
+
+            // Header Episodio
+            this.printText(ep.title.toUpperCase(), 20, 'bold', COLORS.TEXT_MAIN, CONFIG.CONTENT_WIDTH);
+            this.y += 5;
+            
+            if (ep.synopsis) {
+                this.printText("SYNOPSIS", 10, 'bold', COLORS.ACCENT_BLUE, CONFIG.CONTENT_WIDTH);
+                this.y += 2;
+                this.printText(ep.synopsis, 10, 'italic', COLORS.TEXT_SEC, CONFIG.CONTENT_WIDTH);
+                this.y += 10;
+            }
+
+            ep.scenes.forEach((scene, index) => {
+                this.drawScene(scene, index + 1, includeTech);
+            });
+        });
+    }
+
+    drawScene(scene: Scene, index: number, includeTech: boolean) {
+        // 1. Preparar Textos
+        const titleText = `${this.t('scene').toUpperCase()} ${index}: ${scene.title}`;
+        const locText = `${scene.location || ''} ${scene.setting ? `| ${scene.setting}` : ''}`;
+
+        // 2. Medir Título (Izquierda)
+        this.doc.setFontSize(12);
+        this.doc.setFont('helvetica', 'bold');
+        // Ancho máximo para título: 65% del ancho disponible para dar espacio a la ubicación
+        const titleMaxWidth = CONFIG.CONTENT_WIDTH * 0.65;
+        const titleLines = this.doc.splitTextToSize(titleText, titleMaxWidth);
+        
+        // 3. Medir Ubicación (Derecha)
+        this.doc.setFontSize(10);
+        this.doc.setFont('helvetica', 'normal');
+        // Ancho máximo para ubicación: 30% del ancho disponible
+        const locMaxWidth = CONFIG.CONTENT_WIDTH * 0.30;
+        const locLines = this.doc.splitTextToSize(locText, locMaxWidth);
+
+        // 4. Calcular Altura de la Caja (Header)
+        const titleLineH = this.getLineHeight(12);
+        const locLineH = this.getLineHeight(10);
+        
+        const titleBlockH = titleLines.length * titleLineH;
+        const locBlockH = locLines.length * locLineH;
+        
+        const maxContentH = Math.max(titleBlockH, locBlockH);
+        const boxPadding = 8; // 4mm padding arriba y abajo
+        const boxHeight = maxContentH + boxPadding;
+
+        // 5. Verificar Salto de Página
+        // Necesitamos espacio para el header + al menos un poco de la descripción o un plano
+        this.checkPageBreak(boxHeight + 20);
+
+        // 6. Dibujar Fondo (Barra Negra)
+        this.doc.setFillColor(COLORS.SCENE_BG);
+        this.doc.rect(CONFIG.MARGIN, this.y, CONFIG.CONTENT_WIDTH, boxHeight, 'F');
+        
+        // 7. Dibujar Título
+        this.doc.setTextColor('#FFFFFF');
+        this.doc.setFontSize(12);
+        this.doc.setFont('helvetica', 'bold');
+        // Ajuste vertical: padding + compensación de baseline
+        this.doc.text(titleLines, CONFIG.MARGIN + 3, this.y + 4 + (titleLineH * 0.75));
+        
+        // 8. Dibujar Ubicación
+        this.doc.setFontSize(10);
+        this.doc.setFont('helvetica', 'normal');
+        this.doc.text(locLines, CONFIG.MARGIN + CONFIG.CONTENT_WIDTH - 3, this.y + 4 + (locLineH * 0.75), { align: 'right' });
+
+        // 9. Avanzar Y
+        this.y += boxHeight + 5;
+
+        // Descripción Escena (Fuera del header negro)
+        if (scene.actions) {
+            this.printText(scene.actions, 10, 'normal', COLORS.TEXT_MAIN, CONFIG.CONTENT_WIDTH);
+            this.y += 5;
+        }
+
+        // GRID DE PLANOS (2 Columnas)
+        const colWidth = (CONFIG.CONTENT_WIDTH - CONFIG.COL_GAP) / 2;
+        
+        for (let i = 0; i < scene.shots.length; i += 2) {
+            const shotA = scene.shots[i];
+            const shotB = scene.shots[i+1]; // Puede ser undefined
+
+            // Calcular altura requerida para ESTA fila
+            const heightA = this.calculateShotHeight(shotA, colWidth, includeTech);
+            const heightB = shotB ? this.calculateShotHeight(shotB, colWidth, includeTech) : 0;
+            const rowHeight = Math.max(heightA, heightB);
+
+            // Verificar salto de página para TODA la fila
+            if (this.checkPageBreak(rowHeight + 5)) {
+                // Si saltamos, reimprimir un mini header de "Escena X (cont)" sería ideal, pero por simplicidad solo seguimos
+            }
+
+            const startY = this.y;
+
+            // Dibujar A
+            this.drawShot(shotA, i + 1, CONFIG.MARGIN, startY, colWidth, rowHeight, includeTech);
+
+            // Dibujar B
+            if (shotB) {
+                this.drawShot(shotB, i + 2, CONFIG.MARGIN + colWidth + CONFIG.COL_GAP, startY, colWidth, rowHeight, includeTech);
+            }
+
+            this.y = startY + rowHeight + CONFIG.ROW_GAP;
+        }
+        
+        this.drawDivider(5);
+    }
+
+    calculateShotHeight(shot: Shot, width: number, includeTech: boolean): number {
+        const imgHeight = width * (9/16); // 16:9 ratio fijo para uniformidad
+        let h = imgHeight + 5; // Imagen + gap
+
+        // Header (Tipo + Duración)
+        h += 6;
+
+        // Descripción
+        h += this.measureText(shot.description, 9, width) + 3;
+
+        // Tech Details
+        if (includeTech) {
+            const techLines = this.getTechLines(shot);
+            if (techLines.length > 0) {
+                // Caja gris: padding top/bottom (4) + lineas
+                h += (techLines.length * 4) + 6; 
+            }
+        }
+
+        return h + 5; // Padding final
+    }
+
+    getTechLines(shot: Shot) {
+        const fields = [
+            { l: this.t('shotType'), v: shot.shotType },
+            { l: this.t('cameraMovement'), v: shot.cameraMovement },
+            { l: this.t('lensType'), v: shot.lensType },
+            { l: this.t('lightingScheme'), v: shot.lighting },
+            { l: this.t('soundFx'), v: shot.soundFx },
+        ];
+        return fields.filter(f => f.v && f.v !== 'None' && f.v !== 'Unassigned' && f.v !== 'Default');
+    }
+
+    drawShot(shot: Shot, index: number, x: number, y: number, width: number, totalHeight: number, includeTech: boolean) {
+        let currY = y;
+
+        // 1. Imagen
+        const imgHeight = width * (9/16);
+        this.doc.setFillColor(COLORS.BG_BOX);
+        this.doc.rect(x, currY, width, imgHeight, 'F'); // Placeholder gris
+
+        if (shot.imageUrl && shot.imageUrl.startsWith('data:')) {
+            try {
+                // Ajuste de "object-cover" manual
+                this.doc.addImage(shot.imageUrl, 'PNG', x, currY, width, imgHeight, undefined, 'FAST');
+            } catch(e) {}
+        }
+
+        // Badge Número
+        this.doc.setFillColor(COLORS.ACCENT_BLUE);
+        this.doc.rect(x, currY, 8, 6, 'F');
+        this.doc.setFontSize(7);
+        this.doc.setFont('helvetica', 'bold');
+        this.doc.setTextColor('#FFFFFF');
+        this.doc.text(`${index}`, x + 4, currY + 4, { align: 'center' });
+
+        // Badge Duración
+        const durText = `${shot.duration}s`;
+        const durW = this.doc.getTextWidth(durText) + 4;
+        this.doc.setFillColor(COLORS.SCENE_BG);
+        this.doc.rect(x + width - durW, currY + imgHeight - 6, durW, 6, 'F');
+        this.doc.text(durText, x + width - durW/2, currY + imgHeight - 2, { align: 'center' });
+
+        currY += imgHeight + 4;
+
+        // 2. Header Plano
+        this.doc.setFontSize(9);
+        this.doc.setFont('helvetica', 'bold');
+        this.doc.setTextColor(COLORS.TEXT_MAIN);
+        // Cortar texto si es muy largo
+        let typeText = shot.shotType || this.t('shot');
+        if (this.doc.getTextWidth(typeText) > width) typeText = typeText.substring(0, 25) + '...';
+        this.doc.text(typeText, x, currY);
+        
+        currY += 4;
+
+        // 3. Descripción
+        this.doc.setFontSize(9);
+        this.doc.setFont('helvetica', 'normal');
+        this.doc.setTextColor(COLORS.TEXT_SEC);
+        const descLines = this.doc.splitTextToSize(shot.description, width);
+        this.doc.text(descLines, x, currY + 3); // +3 baseline
+        currY += (descLines.length * this.getLineHeight(9)) + 2;
+
+        // 4. Detalles Técnicos (Grid)
+        if (includeTech) {
+            const techLines = this.getTechLines(shot);
+            if (techLines.length > 0) {
+                const boxH = (techLines.length * 4) + 4;
+                
+                this.doc.setFillColor(COLORS.BG_BOX);
+                this.doc.roundedRect(x, currY, width, boxH, 1, 1, 'F');
+                
+                let techY = currY + 4;
+                this.doc.setFontSize(7);
+                
+                techLines.forEach(field => {
+                    this.doc.setFont('helvetica', 'bold');
+                    this.doc.setTextColor(COLORS.TEXT_LIGHT);
+                    this.doc.text(field.l + ":", x + 2, techY);
+                    
+                    this.doc.setFont('helvetica', 'normal');
+                    this.doc.setTextColor(COLORS.TEXT_SEC);
+                    const labelW = this.doc.getTextWidth(field.l + ": ");
+                    
+                    // Truncate valor para que no desborde
+                    let val = field.v;
+                    const maxValW = width - labelW - 4;
+                    if (this.doc.getTextWidth(val) > maxValW) {
+                        // Simple truncado aproximado
+                        val = val.substring(0, 30) + '...'; 
+                    }
+                    this.doc.text(val, x + 2 + labelW, techY);
+                    
+                    techY += 4;
+                });
+            }
         }
     }
 
-    return currentY - startY;
-};
+    drawReferences(references: Reference[]) {
+        if (references.length === 0) return;
+        this.doc.addPage();
+        this.y = CONFIG.MARGIN;
+        
+        this.drawSectionTitle(this.t('references'));
 
-// --- MAIN EXPORT FUNCTION ---
+        references.forEach(ref => {
+            this.checkPageBreak(25);
+            this.doc.setTextColor(COLORS.ACCENT_BLUE);
+            this.doc.setFontSize(11);
+            this.doc.setFont('helvetica', 'bold');
+            this.doc.text(ref.title, CONFIG.MARGIN, this.y);
+            
+            // Link simple
+            const w = this.doc.getTextWidth(ref.title);
+            this.doc.link(CONFIG.MARGIN, this.y - 3, w, 4, { url: ref.uri });
+
+            this.y += 5;
+            this.printText(ref.description, 9, 'normal', COLORS.TEXT_SEC, CONFIG.CONTENT_WIDTH);
+            this.y += 8;
+        });
+    }
+
+    drawFooter(page: number, total: number) {
+        const str = `${this.t('pdfPageInfo').replace('{page}', page.toString()).replace('{total}', total.toString())}`;
+        this.doc.setFontSize(8);
+        this.doc.setTextColor(COLORS.TEXT_LIGHT);
+        this.doc.text(str, CONFIG.PAGE_WIDTH / 2, CONFIG.PAGE_HEIGHT - 5, { align: 'center' });
+    }
+
+    save(filename: string) {
+        const totalPages = this.doc.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            this.doc.setPage(i);
+            this.drawFooter(i, totalPages);
+        }
+        const safeName = filename.replace(/[^a-z0-9]/gi, '_') || 'Storyboard';
+        this.doc.save(`${safeName}.pdf`);
+    }
+}
+
+// --- FUNCIÓN PRINCIPAL EXPORTADA ---
 
 export const exportStoryboardToPDF = async (
     title: string,
@@ -297,341 +635,49 @@ export const exportStoryboardToPDF = async (
     treatment: string,
     references: Reference[],
     narrativeArc: ArcPoint[],
+    authors: Author[],
     options: PDFExportOptions
 ) => {
     try {
-        const doc = new jsPDF();
-        let currentY = MARGIN;
+        const generator = new PDFGenerator(t);
 
-        const checkBreak = (heightNeeded: number) => {
-            if (currentY + heightNeeded > PAGE_HEIGHT - MARGIN) {
-                doc.addPage();
-                currentY = MARGIN;
-                return true;
-            }
-            return false;
-        };
-
-        // --- 1. COVER PAGE ---
+        // 1. Portada
         if (options.includeCover) {
-            currentY += 60;
-            
-            // Title
-            doc.setFontSize(FONTS.TITLE + 6);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(COLORS.BLACK);
-            const titleLines = doc.splitTextToSize(title.toUpperCase(), CONTENT_WIDTH);
-            doc.text(titleLines, PAGE_WIDTH / 2, currentY, { align: 'center' });
-            currentY += (titleLines.length * 12) + 10;
-
-            // Subtitle / Author
-            if (author) {
-                doc.setFontSize(FONTS.HEADER);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(COLORS.GRAY_DARK);
-                doc.text(t('pdfByAuthor').replace('{authorName}', author), PAGE_WIDTH / 2, currentY, { align: 'center' });
-                currentY += 40;
-            }
-
-            // Metadata Table
-            if (options.includeMetadata) {
-                const startX = PAGE_WIDTH / 2 - 70;
-                const col1 = startX;
-                const col2 = startX + 80;
-                
-                const drawRow = (lbl: string, val: string) => {
-                    doc.setFontSize(FONTS.BODY);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setTextColor(COLORS.BLACK);
-                    doc.text(lbl, col1, currentY);
-                    
-                    doc.setFont('helvetica', 'normal');
-                    doc.setTextColor(COLORS.GRAY_DARK);
-                    doc.text(val, col2, currentY);
-                    
-                    doc.setDrawColor(COLORS.GRAY_LIGHT);
-                    doc.line(col1, currentY + 2, col2 + 50, currentY + 2);
-                    currentY += 10;
-                };
-
-                drawRow(t('storyboardStyleLabel'), style);
-                drawRow(t('aspectRatioLabel'), aspectRatio);
-                drawRow(t('episodes'), episodes.length.toString());
-                drawRow(t('characters'), characters.length.toString());
-                drawRow(t('pdfGeneratedOn'), new Date().toLocaleDateString());
-            }
-
-            doc.addPage();
-            currentY = MARGIN;
-        }
-
-        // --- 2. STORY BIBLE ---
-        if (options.includeBible) {
-            doc.setFontSize(FONTS.TITLE);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(COLORS.ACCENT);
-            doc.text(t('outlineTab'), MARGIN, currentY);
-            currentY += 15;
-
-            // Logline Box
-            doc.setFillColor(COLORS.BG_LIGHT);
-            doc.setDrawColor(COLORS.ACCENT);
-            doc.rect(MARGIN, currentY, CONTENT_WIDTH, 25, 'FD');
-            
-            doc.setFontSize(FONTS.SUBHEADER);
-            doc.setTextColor(COLORS.ACCENT);
-            doc.text(t('logline').toUpperCase(), MARGIN + 5, currentY + 8);
-            
-            const logY = currentY + 15;
-            printWrappedText(doc, logline, MARGIN + 5, logY, CONTENT_WIDTH - 10, FONTS.BODY, 'italic', COLORS.GRAY_DARK);
-            currentY += 35;
-
-            // Narrative Arc
-            if (options.includeNarrativeArc && narrativeArc.length > 0) {
-                checkBreak(60);
-                currentY = drawNarrativeArc(doc, narrativeArc, currentY, CONTENT_WIDTH);
-                currentY += 10;
-            }
-
-            // Structural Analysis
-            if (structuralAnalysis) {
-                checkBreak(60);
-                doc.setFontSize(FONTS.HEADER);
-                doc.setTextColor(COLORS.BLACK);
-                doc.text(t('structuralAnalysis'), MARGIN, currentY);
-                currentY += 8;
-                currentY = printWrappedText(doc, structuralAnalysis, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY);
-                currentY += 10;
-            }
-
-            // Treatment
-            if (treatment) {
-                checkBreak(60);
-                doc.setFontSize(FONTS.HEADER);
-                doc.setTextColor(COLORS.BLACK);
-                doc.text(t('treatment'), MARGIN, currentY);
-                currentY += 8;
-                currentY = printWrappedText(doc, treatment, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY);
-                currentY += 10;
-            }
-
-            doc.addPage();
-            currentY = MARGIN;
-        }
-
-        // --- 3. CHARACTERS ---
-        if (options.includeCharacters && characters.length > 0) {
-            doc.setFontSize(FONTS.TITLE);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(COLORS.ACCENT);
-            doc.text(t('characters'), MARGIN, currentY);
-            currentY += 15;
-
-            for (const char of characters) {
-                checkBreak(65);
-
-                // Card
-                doc.setDrawColor(COLORS.BORDER);
-                doc.setFillColor(255, 255, 255);
-                doc.roundedRect(MARGIN, currentY, CONTENT_WIDTH, 60, 2, 2, 'FD');
-
-                // Image
-                if (char.images.length > 0 && char.images[0].startsWith('data:')) {
-                    try {
-                        doc.addImage(char.images[0], 'PNG', MARGIN + 2, currentY + 2, 35, 56, undefined, 'FAST');
-                    } catch(e) {}
-                } else {
-                    doc.setFillColor(COLORS.BG_LIGHT);
-                    doc.rect(MARGIN + 2, currentY + 2, 35, 56, 'F');
-                }
-
-                // Data
-                const textX = MARGIN + 42;
-                let textY = currentY + 10;
-                const textW = CONTENT_WIDTH - 45;
-
-                doc.setFontSize(FONTS.HEADER);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(COLORS.BLACK);
-                doc.text(char.name, textX, textY);
-                
-                doc.setFontSize(FONTS.BODY);
-                doc.setFont('helvetica', 'italic');
-                doc.setTextColor(COLORS.GRAY_MEDIUM);
-                doc.text(char.role, textX + doc.getTextWidth(char.name) + 3, textY);
-                
-                textY += 10;
-
-                const printField = (label: string, val: string) => {
-                    doc.setFontSize(FONTS.SMALL);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setTextColor(COLORS.GRAY_DARK);
-                    doc.text(label + ": ", textX, textY);
-                    const lw = doc.getTextWidth(label + ": ");
-                    
-                    doc.setFont('helvetica', 'normal');
-                    const lines = doc.splitTextToSize(val, textW - lw);
-                    doc.text(lines, textX + lw, textY);
-                    textY += (lines.length * 4) + 2;
-                };
-
-                printField(t('pdfPersonality'), char.personality);
-                printField(t('pdfAppearance'), char.appearance);
-                printField(t('characterOutfit'), char.outfit);
-
-                currentY += 65;
-            }
-            doc.addPage();
-            currentY = MARGIN;
-        }
-
-        // --- 4. EPISODES (STORYBOARD) ---
-        const episodesToExport = options.includeAllEpisodes 
-            ? episodes 
-            : episodes.filter(e => e.id === activeEpisodeId);
-
-        for (const ep of episodesToExport) {
-            if (currentY !== MARGIN) {
-                doc.addPage();
-                currentY = MARGIN;
-            }
-
-            // Episode Header
-            doc.setFillColor(COLORS.BLACK);
-            doc.rect(0, currentY - 10, PAGE_WIDTH, 25, 'F');
-            
-            doc.setTextColor('#FFFFFF');
-            doc.setFontSize(FONTS.TITLE);
-            doc.setFont('helvetica', 'bold');
-            doc.text(ep.title, MARGIN, currentY + 8);
-            currentY += 25;
-
-            // Synopsis
-            if (ep.synopsis) {
-                doc.setFontSize(FONTS.SUBHEADER);
-                doc.setTextColor(COLORS.ACCENT);
-                doc.setFont('helvetica', 'bold');
-                doc.text("Synopsis", MARGIN, currentY);
-                currentY += 6;
-                currentY = printWrappedText(doc, ep.synopsis, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY, 'italic', COLORS.GRAY_DARK);
-                currentY += 15;
-            }
-
-            for (const [sIndex, scene] of ep.scenes.entries()) {
-                checkBreak(40);
-
-                // Scene Header
-                doc.setDrawColor(COLORS.ACCENT);
-                doc.setLineWidth(0.8);
-                doc.line(MARGIN, currentY, MARGIN + CONTENT_WIDTH, currentY);
-                currentY += 6;
-
-                doc.setFontSize(FONTS.HEADER);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(COLORS.BLACK);
-                doc.text(`${t('scene')} ${sIndex + 1}: ${scene.title}`, MARGIN, currentY);
-                
-                doc.setFontSize(FONTS.SMALL);
-                doc.setTextColor(COLORS.GRAY_MEDIUM);
-                const locInfo = `${scene.location || ''} ${scene.setting ? `| ${scene.setting}` : ''}`;
-                doc.text(locInfo, MARGIN + CONTENT_WIDTH - doc.getTextWidth(locInfo), currentY);
-                currentY += 8;
-
-                if (scene.actions) {
-                    currentY = printWrappedText(doc, scene.actions, MARGIN, currentY, CONTENT_WIDTH, FONTS.BODY, 'normal', COLORS.GRAY_DARK);
-                    currentY += 8;
-                }
-
-                // SHOTS LAYOUT
-                const gap = 6;
-                if (options.layout === 'compact') {
-                    // 2 Columns
-                    const colWidth = (CONTENT_WIDTH - gap) / 2;
-                    
-                    for (let i = 0; i < scene.shots.length; i += 2) {
-                        const shotA = scene.shots[i];
-                        const shotB = scene.shots[i+1];
-
-                        // Calculate Max Height Needed for this Row
-                        const heightA = calculateShotHeight(doc, shotA, colWidth, options.includeTechDetails, t);
-                        const heightB = shotB ? calculateShotHeight(doc, shotB, colWidth, options.includeTechDetails, t) : 0;
-                        const rowHeight = Math.max(heightA, heightB);
-
-                        if (checkBreak(rowHeight + 10)) {
-                            // If break, we are at top of new page
-                        }
-
-                        const rowStartY = currentY;
-
-                        // Draw A
-                        const usedA = drawShotCard(doc, shotA, i+1, MARGIN, rowStartY, colWidth, t, options);
-                        
-                        // Draw B
-                        let usedB = 0;
-                        if (shotB) {
-                            usedB = drawShotCard(doc, shotB, i+2, MARGIN + colWidth + gap, rowStartY, colWidth, t, options);
-                        }
-
-                        currentY += Math.max(usedA, usedB) + gap + 5;
-                    }
-
-                } else {
-                    // 1 Column (Standard)
-                    const shotWidth = CONTENT_WIDTH * 0.8;
-                    const shotX = MARGIN + (CONTENT_WIDTH - shotWidth) / 2;
-
-                    for (const [i, shot] of scene.shots.entries()) {
-                        const estHeight = calculateShotHeight(doc, shot, shotWidth, options.includeTechDetails, t);
-                        checkBreak(estHeight + 10);
-
-                        const usedH = drawShotCard(doc, shot, i+1, shotX, currentY, shotWidth, t, options);
-                        currentY += usedH + gap + 5;
-                    }
-                }
-                
-                currentY += 10; // Space between scenes
-            }
-        }
-
-        // --- 5. REFERENCES ---
-        if (options.includeReferences && references.length > 0) {
-            doc.addPage();
-            currentY = MARGIN;
-            doc.setFontSize(FONTS.TITLE);
-            doc.setTextColor(COLORS.BLACK);
-            doc.text(t('references'), MARGIN, currentY);
-            currentY += 15;
-
-            references.forEach(ref => {
-                checkBreak(30);
-                doc.setTextColor(COLORS.ACCENT);
-                doc.setFontSize(FONTS.SUBHEADER);
-                
-                // Safe link handling
-                doc.text(ref.title, MARGIN, currentY);
-                const w = doc.getTextWidth(ref.title);
-                doc.link(MARGIN, currentY - 5, w, 6, { url: ref.uri });
-
-                currentY += 6;
-                currentY = printWrappedText(doc, ref.description, MARGIN, currentY, CONTENT_WIDTH, FONTS.SMALL, 'normal', COLORS.GRAY_DARK);
-                currentY += 8;
+            generator.drawCover(title, author, { 
+                episodes: episodes.length, 
+                characters: characters.length 
             });
         }
 
-        // --- 6. FOOTER ---
-        const totalPages = doc.getNumberOfPages();
-        for (let i = 1; i <= totalPages; i++) {
-            doc.setPage(i);
-            doc.setFontSize(8);
-            doc.setTextColor(COLORS.GRAY_LIGHT);
-            doc.text(`${t('pdfPageInfo').replace('{page}', i.toString()).replace('{total}', totalPages.toString())}`, PAGE_WIDTH / 2, PAGE_HEIGHT - 10, { align: 'center' });
+        // 2. Production Team (Authors) - Included after cover or before bible
+        if (options.includeMetadata && authors && authors.length > 0) {
+             generator.drawAuthors(authors);
         }
 
-        const safeName = (title.replace(/[^a-z0-9]/gi, '_') || 'Storyboard');
-        doc.save(`${safeName}.pdf`);
-        
+        // 3. Biblia
+        if (options.includeBible) {
+            generator.drawBible(logline, treatment, structuralAnalysis, options.includeNarrativeArc ? narrativeArc : []);
+        }
+
+        // 4. Personajes
+        if (options.includeCharacters) {
+            generator.drawCharacters(characters);
+        }
+
+        // 5. Storyboard (Episodios -> Escenas -> Grid Planos)
+        // Forzamos "Compact" (2 columnas) como pidió el usuario
+        generator.drawEpisodes(episodes, options.includeTechDetails, activeEpisodeId, options.includeAllEpisodes);
+
+        // 6. Referencias
+        if (options.includeReferences) {
+            generator.drawReferences(references);
+        }
+
+        // Guardar
+        generator.save(title);
+
     } catch (e) {
-        console.error("PDF Generation Error:", e);
-        alert("Failed to generate PDF. Please check the console for details.\nError: " + (e as Error).message);
+        console.error("PDF Gen Error", e);
+        alert("Error generando PDF: " + (e as Error).message);
     }
 };

@@ -25,7 +25,7 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { 
     LayoutGridIcon, FilmIcon, UserIcon, BookOpenIcon, VideoIcon, ChartBarIcon, 
     ActivityIcon, FloppyDiskIcon, FolderOpenIcon, TrashIcon, PlusIcon, 
-    ChevronLeftIcon, ChevronRightIcon, WandIcon, CloseIcon, UsersIcon
+    ChevronLeftIcon, ChevronRightIcon, WandIcon, CloseIcon, UsersIcon, CheckCircleIcon
 } from './components/icons';
 import { ensureStoryConsistency, modifyStory, createCharacterImagePrompt, createImagePromptForShot, generateImage } from './services/geminiService';
 
@@ -116,12 +116,18 @@ export const App: React.FC = () => {
       loadCustomStyles();
   }, []);
 
-  // Keyboard Shortcut for Modification
+  // Keyboard Shortcuts
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
+          // Modify Story: Ctrl + Alt + M
           if (e.ctrlKey && e.altKey && (e.key === 'm' || e.key === 'M')) {
               e.preventDefault();
               setShowModificationModal(true);
+          }
+          // Check Consistency: Shift + Alt + A
+          if (e.shiftKey && e.altKey && (e.key === 'a' || e.key === 'A')) {
+              e.preventDefault();
+              setShowConsistencyModal(true);
           }
       };
       window.addEventListener('keydown', handleKeyDown);
@@ -459,6 +465,11 @@ export const App: React.FC = () => {
                             <WandIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
                             {!isSidebarCollapsed && t('modifyStory')}
                         </button>
+
+                        <button onClick={() => setShowConsistencyModal(true)} className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-md text-sm font-medium text-gray-400 hover:text-yellow-400 hover:bg-gray-700 transition-colors`} title={t('checkConsistency')}>
+                            <CheckCircleIcon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
+                            {!isSidebarCollapsed && t('checkConsistency')}
+                        </button>
                     </div>
                 </div>
 
@@ -466,7 +477,7 @@ export const App: React.FC = () => {
                     <LanguageSelector collapsed={isSidebarCollapsed} />
                     {!isSidebarCollapsed && (
                         <div className="text-xs text-gray-500 text-center mt-4">
-                            v1.6.5 Studio Edition
+                            v1.6.6 Studio Edition
                         </div>
                     )}
                 </div>

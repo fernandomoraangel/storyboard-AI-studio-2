@@ -933,5 +933,140 @@ export const ensureStoryConsistency = async (currentState: ProjectState, languag
 };
 
 export const modifyStory = async (currentState: ProjectState, settings: ModificationSettings, language: Language): Promise<{ state: ProjectState; explanation: string }> => {
-    return { state: currentState, explanation: "Full series modification not yet implemented." };
+    const langInstruction = language === 'es' ? 'en español' : 'in English';
+    
+    // 1. Construct Context & Instructions
+    const scopeList = Object.entries(settings.scope)
+        .filter(([k, v]) => v)
+        .map(([k]) => k)
+        .join(', ');
+
+    const prompt = `
+    You are a creative story editor and co-writer. The user wants to MODIFY their story.
+    
+    CURRENT STORY STATE:
+    Title: ${currentState.seriesTitle}
+    Logline: ${currentState.logline}
+    Treatment: ${currentState.treatment}
+    Characters: ${JSON.stringify(currentState.characters.map(c => ({ name: c.name, role: c.role, personality: c.personality })))}
+    Episodes: ${JSON.stringify(currentState.episodes.map(e => ({ title: e.title, synopsis: e.synopsis })))}
+    
+    MODIFICATION SETTINGS:
+    - User Instructions: "${settings.instructions}"
+    - Intensity: ${settings.intensity}/10 (10 = drastic changes)
+    - Weirdness: ${settings.weirdness}/10 (10 = surreal/avant-garde)
+    - Scope of Change: ${settings.aiDecides ? "You decide what needs changing to fulfill the request." : "Strictly modify ONLY: " + scopeList}
+    ${settings.newStructure ? `- Re-structure the story to: ${settings.newStructure}` : ''}
+    ${settings.segerSettings ? `- Apply Linda Seger Refinements: ${Object.keys(settings.segerSettings).filter(k => (settings.segerSettings as any)[k]).join(', ')}` : ''}
+    
+    TASK:
+    Rewrite the story components (Logline, Treatment, Characters, Episode Outline) based on the instructions.
+    Maintain consistency across modified elements.
+    
+    OUTPUT FORMAT (JSON):
+    {
+        "explanation": "A brief summary of what was changed and why.",
+        "seriesTitle": "Updated Title (if changed)",
+        "logline": "Updated Logline",
+        "treatment": "Updated Treatment",
+        "characters": [ { "name": "...", "role": "...", "personality": "...", "appearance": "...", "outfit": "...", "behavior": "..." } ], 
+        "episodes": [ { "title": "...", "synopsis": "..." } ]
+    }
+    
+    Return ONLY the JSON object. The response must be in ${langInstruction}.
+    `;
+
+    const response = await generateContentWithRetry({
+        model: 'gemini-3-pro-preview',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    explanation: { type: Type.STRING },
+                    seriesTitle: { type: Type.STRING },
+                    logline: { type: Type.STRING },
+                    treatment: { type: Type.STRING },
+                    characters: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                name: { type: Type.STRING },
+                                role: { type: Type.STRING },
+                                personality: { type: Type.STRING },
+                                appearance: { type: Type.STRING },
+                                outfit: { type: Type.STRING },
+                                behavior: { type: Type.STRING }
+                            }
+                        }
+                    },
+                    episodes: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                title: { type: Type.STRING },
+                                synopsis: { type: Type.STRING }
+                            }
+                        }
+                    }
+                },
+                required: ['explanation', 'logline', 'treatment']
+            }
+        }
+    });
+
+    const result = JSON.parse(cleanJson(response.text.trim()));
+    const newState = { ...currentState };
+
+    // Apply changes
+    if (result.seriesTitle) newState.seriesTitle = result.seriesTitle;
+    if (result.logline) newState.logline = result.logline;
+    if (result.treatment) newState.treatment = result.treatment;
+
+    if (result.characters && Array.isArray(result.characters)) {
+        // Smart Merge: Try to match characters by name to preserve IDs and Images
+        newState.characters = result.characters.map((newC: any, i: number) => {
+            const existing = currentState.characters.find(c => c.name.toLowerCase() === newC.name.toLowerCase());
+            return {
+                id: existing ? existing.id : Date.now() + i,
+                images: existing ? existing.images : [],
+                name: newC.name,
+                role: newC.role,
+                personality: newC.personality,
+                appearance: newC.appearance,
+                outfit: newC.outfit,
+                behavior: newC.behavior
+            };
+        });
+    }
+
+    if (result.episodes && Array.isArray(result.episodes)) {
+        // Smart Merge: Update episodes metadata
+        if (result.episodes.length === currentState.episodes.length) {
+            // If count matches, update content but keep scene structure (assuming structure didn't change drastically)
+            newState.episodes = currentState.episodes.map((ep, i) => ({
+                ...ep,
+                title: result.episodes[i].title,
+                synopsis: result.episodes[i].synopsis
+            }));
+        } else {
+            // If count changes, we have to rebuild. 
+            // We keep existing scenes where possible to avoid data loss, but misalignment is possible.
+            newState.episodes = result.episodes.map((newEp: any, i: number) => {
+                const existing = currentState.episodes[i];
+                return {
+                    id: existing ? existing.id : Date.now() + i,
+                    title: newEp.title,
+                    synopsis: newEp.synopsis,
+                    scenes: existing ? existing.scenes : [] // Attach existing scenes or start empty
+                };
+            });
+            result.explanation += ` (Note: The number of episodes changed from ${currentState.episodes.length} to ${result.episodes.length}. Scenes may need manual adjustment.)`;
+        }
+    }
+
+    return { state: newState, explanation: result.explanation };
 };

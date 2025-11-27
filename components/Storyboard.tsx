@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Scene, Character, Shot, StoryboardStyle } from '../types';
 import { SceneCard } from './SceneCard';
+import { GalleryView } from './GalleryView';
 import { useLanguage } from '../contexts/languageContext';
-import { RowsIcon, PanelTopCloseIcon } from './icons';
+import { RowsIcon, PanelTopCloseIcon, GalleryIcon } from './icons';
 
 interface StoryboardProps {
   scenes: Scene[];
@@ -21,22 +22,23 @@ interface StoryboardProps {
 export const Storyboard: React.FC<StoryboardProps> = ({ scenes, characters, updateSceneDetails, deleteScene, addShot, updateShot, deleteShot, storyboardStyle, aspectRatio, reorderScenes, reorderShots }) => {
   const { t } = useLanguage();
   const [openScenes, setOpenScenes] = useState<Record<number, boolean>>({});
-  
+  const [showGallery, setShowGallery] = useState(false);
+
   useEffect(() => {
     setOpenScenes(prev => {
-        const newState = { ...prev };
-        scenes.forEach(scene => {
-            if (newState[scene.id] === undefined) {
-                newState[scene.id] = true;
-            }
-        });
-        return newState;
+      const newState = { ...prev };
+      scenes.forEach(scene => {
+        if (newState[scene.id] === undefined) {
+          newState[scene.id] = true;
+        }
+      });
+      return newState;
     });
   }, [scenes]);
 
-  const toggleScene = (id: number) => setOpenScenes(p => ({...p, [id]: !p[id]}));
-  const expandAll = () => setOpenScenes(scenes.reduce((acc, s) => ({...acc, [s.id]: true}), {}));
-  const collapseAll = () => setOpenScenes(scenes.reduce((acc, s) => ({...acc, [s.id]: false}), {}));
+  const toggleScene = (id: number) => setOpenScenes(p => ({ ...p, [id]: !p[id] }));
+  const expandAll = () => setOpenScenes(scenes.reduce((acc, s) => ({ ...acc, [s.id]: true }), {}));
+  const collapseAll = () => setOpenScenes(scenes.reduce((acc, s) => ({ ...acc, [s.id]: false }), {}));
 
   const dragItemIndex = useRef<number | null>(null);
   const dragOverItemIndex = useRef<number | null>(null);
@@ -47,14 +49,14 @@ export const Storyboard: React.FC<StoryboardProps> = ({ scenes, characters, upda
     e.dataTransfer.effectAllowed = 'move';
     setTimeout(() => setDragging(true), 0);
   };
-  
+
   const handleDragEnter = (index: number) => {
     dragOverItemIndex.current = index;
   };
 
   const handleDragEnd = () => {
     if (dragItemIndex.current !== null && dragOverItemIndex.current !== null && dragItemIndex.current !== dragOverItemIndex.current) {
-        reorderScenes(dragItemIndex.current, dragOverItemIndex.current);
+      reorderScenes(dragItemIndex.current, dragOverItemIndex.current);
     }
     dragItemIndex.current = null;
     dragOverItemIndex.current = null;
@@ -63,23 +65,33 @@ export const Storyboard: React.FC<StoryboardProps> = ({ scenes, characters, upda
 
   return (
     <div className="space-y-8">
-       <div className="flex justify-end gap-2">
-            <button onClick={expandAll} className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent hover:bg-gray-700 h-9 px-3 text-sky-400 hover:text-sky-300" title={t('expandAll')}>
-                <RowsIcon className="w-4 h-4 mr-2" /> {t('expandAll')}
-            </button>
-            <button onClick={collapseAll} className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent hover:bg-gray-700 h-9 px-3 text-sky-400 hover:text-sky-300" title={t('collapseAll')}>
-                <PanelTopCloseIcon className="w-4 h-4 mr-2" /> {t('collapseAll')}
-            </button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <button onClick={() => setShowGallery(true)} className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent hover:bg-gray-700 h-9 px-3 text-sky-400 hover:text-sky-300" title={t('galleryView')}>
+          <GalleryIcon className="w-4 h-4 mr-2" /> {t('galleryView')}
+        </button>
+        <button onClick={expandAll} className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent hover:bg-gray-700 h-9 px-3 text-sky-400 hover:text-sky-300" title={t('expandAll')}>
+          <RowsIcon className="w-4 h-4 mr-2" /> {t('expandAll')}
+        </button>
+        <button onClick={collapseAll} className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent hover:bg-gray-700 h-9 px-3 text-sky-400 hover:text-sky-300" title={t('collapseAll')}>
+          <PanelTopCloseIcon className="w-4 h-4 mr-2" /> {t('collapseAll')}
+        </button>
+      </div>
+      {showGallery && (
+        <GalleryView
+          scenes={scenes}
+          characters={characters}
+          onClose={() => setShowGallery(false)}
+        />
+      )}
       <div className="space-y-6">
         {scenes.map((scene, index) => (
-          <div 
+          <div
             key={scene.id}
             className={`relative ${dragOverItemIndex.current === index && dragging ? 'drag-over-placeholder' : ''}`}
             onDragEnter={() => handleDragEnter(index)}
           >
-            <SceneCard 
-              scene={scene} 
+            <SceneCard
+              scene={scene}
               sceneNumber={index + 1}
               characters={characters}
               updateSceneDetails={updateSceneDetails}

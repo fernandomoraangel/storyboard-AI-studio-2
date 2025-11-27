@@ -29,6 +29,7 @@ import {
 
 // Components
 import { Storyboard } from "./components/Storyboard";
+import { GalleryView } from "./components/GalleryView";
 import { SeriesBible } from "./components/SeriesBible";
 import { StoryGenerator } from "./components/StoryGenerator";
 import { VisualOrganizer } from "./components/VisualOrganizer";
@@ -45,6 +46,7 @@ import { ConsistencyModal } from "./components/ConsistencyModal";
 import { ModificationPreviewModal } from "./components/ModificationPreviewModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { LoadingSpinner } from "./components/LoadingSpinner";
+import { AlertModal } from "./components/AlertModal";
 import {
   LayoutGridIcon,
   FilmIcon,
@@ -64,6 +66,7 @@ import {
   UsersIcon,
   CheckCircleIcon,
   SettingsIcon,
+  GalleryIcon,
 } from "./components/icons";
 import {
   ensureStoryConsistency,
@@ -155,6 +158,27 @@ export const App: React.FC = () => {
   const [showNewProjectConfirmation, setShowNewProjectConfirmation] =
     useState(false);
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
+
+  // Alert Modal State
+  const [alertState, setAlertState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setAlertState({ isOpen: true, title, message, type });
+  };
+
+  const closeAlert = () => {
+    setAlertState(prev => ({ ...prev, isOpen: false }));
+  };
 
   // Mass Generation State
   const [showGenerationOffer, setShowGenerationOffer] = useState(false);
@@ -281,12 +305,10 @@ export const App: React.FC = () => {
       });
       setCurrentProjectId(id);
       await loadProjectsList();
-      alert(t("projectSaved"));
+      showAlert(t("projectSaved"), "", "success");
     } catch (e) {
       console.error("Failed to save project:", e);
-      alert(
-        t("errorGeneric", { message: "Failed to save project. See console." })
-      );
+      showAlert("Error", t("errorGeneric", { message: "Failed to save project." }), "error");
     }
   };
 
@@ -298,11 +320,11 @@ export const App: React.FC = () => {
         applyState(project.state);
         setShowLoadProjectModal(false);
       } else {
-        alert("Project not found.");
+        showAlert("Error", "Project not found.", "error");
       }
     } catch (e) {
       console.error("Failed to load project:", e);
-      alert(t("errorGeneric", { message: "Failed to load project." }));
+      showAlert("Error", t("errorGeneric", { message: "Failed to load project." }), "error");
     }
   };
 
@@ -339,7 +361,7 @@ export const App: React.FC = () => {
       setResetKey((prev) => prev + 1);
     } catch (e) {
       console.error("Error creating new project:", e);
-      alert(t("errorGeneric", { message: "Failed to reset project." }));
+      showAlert("Error", t("errorGeneric", { message: "Failed to reset project." }), "error");
     }
   };
 
@@ -353,7 +375,7 @@ export const App: React.FC = () => {
         }
       } catch (e) {
         console.error("Failed to delete project:", e);
-        alert("Failed to delete project.");
+        showAlert("Error", "Failed to delete project.", "error");
       }
     }
   };
@@ -493,6 +515,7 @@ export const App: React.FC = () => {
     { id: "episodes", icon: FolderOpenIcon, label: t("episodes") },
     { id: "organizer", icon: LayoutGridIcon, label: t("visualOrganizerTitle") },
     { id: "storyboard", icon: FilmIcon, label: t("storyBoardTab") },
+    { id: "gallery", icon: GalleryIcon, label: t("galleryView") },
     { id: "video", icon: VideoIcon, label: t("videoGeneratorTab") },
     { id: "utilities", icon: ChartBarIcon, label: t("utilitiesTitle") },
     { id: "authors", icon: UsersIcon, label: t("authorsTitle") },
@@ -542,8 +565,8 @@ export const App: React.FC = () => {
                 >
                   <item.icon
                     className={`w-5 h-5 ${!isSidebarCollapsed ? "mr-3" : ""} ${workflowPhase === item.id
-                        ? "text-white"
-                        : "text-gray-500 group-hover:text-gray-300"
+                      ? "text-white"
+                      : "text-gray-500 group-hover:text-gray-300"
                       }`}
                   />
                   {!isSidebarCollapsed && (
@@ -915,6 +938,14 @@ export const App: React.FC = () => {
                 />
               )}
 
+              {workflowPhase === "gallery" && (
+                <GalleryView
+                  scenes={episodes.flatMap(e => e.scenes)}
+                  characters={characters}
+                  onClose={() => setWorkflowPhase("storyboard")}
+                />
+              )}
+
               {workflowPhase === "storyboard" && activeEpisode ? (
                 <div className="animate-fade-in">
                   <div className="mb-6 flex justify-between items-center">
@@ -1114,6 +1145,7 @@ export const App: React.FC = () => {
                   regenerationProgress={regenProgress}
                   onStartRegeneration={handleStartRegeneration}
                   onStopRegeneration={handleStopRegeneration}
+                  showAlert={showAlert}
                 />
               )}
 
@@ -1188,8 +1220,8 @@ export const App: React.FC = () => {
                   <button
                     onClick={() => confirmSaveProject(true)}
                     className={`w-full px-4 py-3 ${currentProjectId
-                        ? "bg-gray-700 hover:bg-gray-600"
-                        : "bg-indigo-600 hover:bg-indigo-500"
+                      ? "bg-gray-700 hover:bg-gray-600"
+                      : "bg-indigo-600 hover:bg-indigo-500"
                       } text-white rounded-md text-sm font-bold transition-colors`}
                   >
                     {t("saveAsNew")}
@@ -1438,28 +1470,39 @@ export const App: React.FC = () => {
                   {t("generating")}
                 </h4>
                 <button
-                  onClick={handleStopRegeneration}
-                  className="text-xs text-red-400 hover:text-red-300 font-medium"
                 >
                   {t("stopRegeneration")}
                 </button>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-2 mb-1">
+              <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
                 <div
                   className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
                   style={{
-                    width: `${(regenProgress.current /
-                        Math.max(1, regenProgress.total)) *
-                      100
-                      }%`,
+                    width: `${(regenProgress.current / regenProgress.total) * 100}%`,
                   }}
                 ></div>
               </div>
-              <div className="text-right text-xs text-gray-400">
-                {regenProgress.current} / {regenProgress.total}
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>
+                  {regenProgress.current} / {regenProgress.total}
+                </span>
+                <span>
+                  {Math.round(
+                    (regenProgress.current / regenProgress.total) * 100
+                  )}
+                  %
+                </span>
               </div>
             </div>
           )}
+
+          <AlertModal
+            isOpen={alertState.isOpen}
+            onClose={closeAlert}
+            title={alertState.title}
+            message={alertState.message}
+            type={alertState.type}
+          />
         </div>
         {showSettingsModal && (
           <SettingsModal onClose={() => setShowSettingsModal(false)} />
@@ -1468,3 +1511,4 @@ export const App: React.FC = () => {
     </LanguageContext.Provider>
   );
 };
+

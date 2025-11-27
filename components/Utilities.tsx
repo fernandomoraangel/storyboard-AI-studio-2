@@ -17,22 +17,23 @@ interface UtilitiesProps {
     onImportProject: (state: ProjectState) => void;
     onExportPDF: () => void;
     onExportAnimatic: () => void;
-    
+
     // New Props for handling regeneration state from parent (App.tsx)
     isRegenerating: boolean;
     regenerationProgress: { current: number; total: number };
     onStartRegeneration: () => void;
     onStopRegeneration: () => void;
+    showAlert: (title: string, message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export const Utilities: React.FC<UtilitiesProps> = ({ 
+export const Utilities: React.FC<UtilitiesProps> = ({
     episodes, characters, setEpisodes, setCharacters, storyboardStyle, aspectRatio, onGetProjectState, onImportProject, onExportPDF, onExportAnimatic,
-    isRegenerating, regenerationProgress, onStartRegeneration, onStopRegeneration
+    isRegenerating, regenerationProgress, onStartRegeneration, onStopRegeneration, showAlert
 }) => {
     const { t } = useLanguage();
     const [tokenCount, setTokenCount] = useState(0);
     const [imageCount, setImageCount] = useState(0);
-    
+
     // Import/Export State
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
@@ -65,7 +66,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
         // Listen for custom event dispatched by geminiService
         const handleImageGenerated = () => calculateMetrics();
         window.addEventListener('imageGenerated', handleImageGenerated);
-        
+
         return () => window.removeEventListener('imageGenerated', handleImageGenerated);
     }, [episodes, characters]);
 
@@ -75,15 +76,15 @@ export const Utilities: React.FC<UtilitiesProps> = ({
         setIsExporting(true);
         try {
             const state = onGetProjectState();
-            
+
             // Create a deep clone to modify for export (strip base64 images)
             const exportState = JSON.parse(JSON.stringify(state)) as ProjectState;
-            
+
             // Strip images from characters and shots
             exportState.characters.forEach(c => {
                 c.images = c.images.map((img, idx) => `images/char_${c.id}_${idx}.png`);
             });
-            
+
             exportState.episodes.forEach(ep => {
                 ep.scenes.forEach(s => {
                     s.shots.forEach(shot => {
@@ -103,7 +104,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
             URL.revokeObjectURL(url);
         } catch (err) {
             console.error("Export JSON failed", err);
-            alert("Export failed.");
+            showAlert("Error", "Export failed.", "error");
         } finally {
             setIsExporting(false);
         }
@@ -115,7 +116,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
             const state = onGetProjectState();
             const zip = new JSZip();
             const imagesFolder = zip.folder("images");
-            
+
             if (!imagesFolder) return;
 
             // Helper to add base64 image to zip
@@ -153,7 +154,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
 
         } catch (err) {
             console.error("Export ZIP failed", err);
-            alert("Export ZIP failed.");
+            showAlert("Error", "Export ZIP failed.", "error");
         } finally {
             setIsExporting(false);
         }
@@ -169,10 +170,10 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                 const json = JSON.parse(event.target?.result as string);
                 setPendingJson(json);
                 // Reset file input value so onChange triggers again if needed
-                e.target.value = ''; 
+                e.target.value = '';
             } catch (err) {
                 console.error("Invalid JSON file", err);
-                alert("Invalid JSON5 file.");
+                showAlert("Error", "Invalid JSON5 file.", "error");
             }
         };
         reader.readAsText(file);
@@ -184,18 +185,18 @@ export const Utilities: React.FC<UtilitiesProps> = ({
 
         try {
             const zipFile = zipInputRef.current?.files?.[0];
-            
+
             if (zipFile) {
                 const zip = await JSZip.loadAsync(zipFile);
-                
+
                 // Helper to read image from zip and convert to base64 data URL
                 const readImageFromZip = async (filename: string): Promise<string | null> => {
                     // Strip path if necessary, the JSON stores e.g. "images/file.png" but our ZIP folder structure might vary
-                    const cleanName = filename.replace(/^images\//, ''); 
+                    const cleanName = filename.replace(/^images\//, '');
                     // Try finding in root 'images/' folder or root
                     const file = zip.file(`images/${cleanName}`) || zip.file(cleanName);
                     if (!file) return null;
-                    
+
                     const base64 = await file.async("base64");
                     // Assume PNG for simplicity or try to detect mime type?
                     return `data:image/png;base64,${base64}`;
@@ -230,7 +231,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                 }
             } else {
                 // No ZIP provided: Clear placeholder paths to avoid broken images
-                 for (const c of pendingJson.characters) {
+                for (const c of pendingJson.characters) {
                     c.images = c.images.filter(img => img.startsWith('data:image'));
                 }
                 for (const ep of pendingJson.episodes) {
@@ -247,11 +248,11 @@ export const Utilities: React.FC<UtilitiesProps> = ({
             onImportProject(pendingJson);
             setPendingJson(null);
             if (zipInputRef.current) zipInputRef.current.value = '';
-            alert(t('projectImportedSuccess'));
+            showAlert(t('projectImportedSuccess') || "Project imported successfully!", "", "success");
 
         } catch (err) {
             console.error("Import failed", err);
-            alert("Import failed. Check console.");
+            showAlert("Error", "Import failed. Check console.", "error");
         } finally {
             setIsImporting(false);
         }
@@ -261,7 +262,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
 
     return (
         <div className="max-w-5xl mx-auto space-y-8">
-            
+
             {/* Header */}
             <div className="flex items-center space-x-3 mb-6">
                 <ChartBarIcon className="w-8 h-8 text-indigo-400" />
@@ -286,8 +287,8 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                             <span>{contextPercentage}%</span>
                         </div>
                         <div className="w-full bg-gray-700 rounded-full h-2">
-                            <div 
-                                className={`h-2 rounded-full transition-all duration-500 ${parseFloat(contextPercentage) > 90 ? 'bg-red-500' : 'bg-indigo-500'}`} 
+                            <div
+                                className={`h-2 rounded-full transition-all duration-500 ${parseFloat(contextPercentage) > 90 ? 'bg-red-500' : 'bg-indigo-500'}`}
                                 style={{ width: `${contextPercentage}%` }}
                             ></div>
                         </div>
@@ -331,18 +332,18 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                     {t('importExportTitle')}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    
+
                     {/* Export Column */}
                     <div className="space-y-4 border-r border-gray-700 pr-8">
                         <h4 className="font-semibold text-gray-300 text-sm uppercase">Export Media</h4>
-                        <button 
+                        <button
                             onClick={onExportPDF}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-900/30 hover:bg-red-900/50 border border-red-900/50 text-red-100 rounded-md font-medium transition-colors"
                         >
                             <BookOpenIcon className="w-5 h-5" />
                             {t('exportToPDF')}
                         </button>
-                        <button 
+                        <button
                             onClick={onExportAnimatic}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-900/50 text-purple-100 rounded-md font-medium transition-colors"
                         >
@@ -351,9 +352,9 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                         </button>
 
                         <div className="border-t border-gray-700 my-2"></div>
-                        
+
                         <h4 className="font-semibold text-gray-300 text-sm uppercase">Export Data</h4>
-                        <button 
+                        <button
                             onClick={handleExportJSON}
                             disabled={isExporting}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-md font-medium transition-colors"
@@ -361,7 +362,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                             <DownloadIcon className="w-5 h-5" />
                             {t('exportJSON')}
                         </button>
-                        <button 
+                        <button
                             onClick={handleExportZIP}
                             disabled={isExporting}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-md font-medium transition-colors"
@@ -374,16 +375,16 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                     {/* Import Column */}
                     <div className="space-y-4">
                         <h4 className="font-semibold text-gray-300 text-sm uppercase">Import</h4>
-                        
+
                         {!pendingJson ? (
                             <label className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md font-medium transition-colors cursor-pointer">
                                 <UploadIcon className="w-5 h-5" />
                                 {t('importProject')}
-                                <input 
-                                    type="file" 
-                                    accept=".json5,.json" 
-                                    onChange={handleJsonFileChange} 
-                                    className="hidden" 
+                                <input
+                                    type="file"
+                                    accept=".json5,.json"
+                                    onChange={handleJsonFileChange}
+                                    className="hidden"
                                     ref={fileInputRef}
                                 />
                             </label>
@@ -393,26 +394,26 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                                 <label className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md text-sm transition-colors cursor-pointer border border-dashed border-gray-500">
                                     <UploadIcon className="w-4 h-4" />
                                     Select ZIP (Optional)
-                                    <input 
-                                        type="file" 
-                                        accept=".zip" 
+                                    <input
+                                        type="file"
+                                        accept=".zip"
                                         ref={zipInputRef}
-                                        className="hidden" 
+                                        className="hidden"
                                     />
                                 </label>
                                 <div className="flex gap-2">
-                                    <button 
-                                        onClick={() => { setPendingJson(null); if(zipInputRef.current) zipInputRef.current.value = ''; }}
+                                    <button
+                                        onClick={() => { setPendingJson(null); if (zipInputRef.current) zipInputRef.current.value = ''; }}
                                         className="flex-1 py-2 text-sm bg-gray-600 hover:bg-gray-500 rounded-md"
                                     >
                                         {t('cancel')}
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={handleFinalImport}
                                         disabled={isImporting}
                                         className="flex-1 py-2 text-sm bg-green-600 hover:bg-green-500 rounded-md font-bold"
                                     >
-                                        {isImporting ? <LoadingSpinner/> : t('loadProject')}
+                                        {isImporting ? <LoadingSpinner /> : t('loadProject')}
                                     </button>
                                 </div>
                             </div>
@@ -438,12 +439,12 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                             <span>{regenerationProgress.current} / {regenerationProgress.total}</span>
                         </div>
                         <div className="w-full bg-gray-700 rounded-full h-4">
-                            <div 
-                                className="bg-indigo-600 h-4 rounded-full transition-all duration-300" 
+                            <div
+                                className="bg-indigo-600 h-4 rounded-full transition-all duration-300"
                                 style={{ width: `${(regenerationProgress.current / Math.max(1, regenerationProgress.total)) * 100}%` }}
                             ></div>
                         </div>
-                        <button 
+                        <button
                             onClick={onStopRegeneration}
                             className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors"
                         >
@@ -451,7 +452,7 @@ export const Utilities: React.FC<UtilitiesProps> = ({
                         </button>
                     </div>
                 ) : (
-                    <button 
+                    <button
                         onClick={onStartRegeneration}
                         className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md font-medium transition-colors shadow-lg hover:shadow-indigo-500/30"
                     >

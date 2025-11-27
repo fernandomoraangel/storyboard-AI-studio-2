@@ -31,36 +31,59 @@ function interpolateLinear(y1: number, y2: number, t: number): number {
     return y1 + (y2 - y1) * t;
 }
 
-export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({ 
-    arc, setArc, currentLogline, currentTreatment, currentEpisodes, onStoryUpdated 
+export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
+    arc, setArc, currentLogline, currentTreatment, currentEpisodes, onStoryUpdated
 }) => {
     const { t, language } = useLanguage();
     const svgRef = useRef<SVGSVGElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    
+
     const [isDragging, setIsDragging] = useState(false);
     const [activePoint, setActivePoint] = useState<{ index: number; type: 'tension' | 'emotion' | 'conflict' } | null>(null);
     const [isRewriting, setIsRewriting] = useState(false);
     const [curveType, setCurveType] = useState<CurveType>('natural');
-    
+
     const keysPressed = useRef<{ n: boolean; d: boolean; shift: boolean }>({ n: false, d: false, shift: false });
 
     const padding = 40;
     const height = 400;
     const width = 800; // internal SVG coordinate space width
 
-    // Initialize X coordinates if missing (legacy support)
+    // Initialize X coordinates if missing (legacy support) or fix legacy positioning
     useEffect(() => {
-        if (arc.length > 0 && arc.some(p => p.x === undefined)) {
-            const newArc = arc.map((p, i) => ({
-                ...p,
-                x: (i / (arc.length - 1 || 1)) * 100,
-                modifiedCurves: undefined, // Legacy points show all
-                isEpisodeAnchor: true // Assume initial points are anchors
-            }));
-            setArc(newArc);
+        if (arc.length > 0) {
+            const anchors = arc.filter(p => p.isEpisodeAnchor);
+            const episodeCount = currentEpisodes.length || anchors.length || 1;
+            const step = 100 / episodeCount;
+
+            // Check if we need to migrate from "edge" positioning (0, 50, 100) to "center" positioning (16, 50, 83)
+            // Legacy: First anchor is at 0. New: First anchor is at step/2.
+            const needsMigration = anchors.length > 0 && anchors[0].x === 0 && episodeCount > 1;
+
+            if (needsMigration || arc.some(p => p.x === undefined)) {
+                const newArc = arc.map((p) => {
+                    if (p.isEpisodeAnchor) {
+                        // Find index among anchors
+                        const anchorIndex = anchors.findIndex(a => a.id === p.id);
+                        if (anchorIndex !== -1) {
+                            return {
+                                ...p,
+                                x: (anchorIndex + 0.5) * step,
+                                modifiedCurves: p.modifiedCurves,
+                                isEpisodeAnchor: true
+                            };
+                        }
+                    }
+                    // For non-anchors or if x is missing
+                    return {
+                        ...p,
+                        x: p.x !== undefined ? p.x : 50, // Default to middle if unknown
+                    };
+                });
+                setArc(newArc);
+            }
         }
-    }, [arc.length]);
+    }, [arc.length, currentEpisodes.length]);
 
     // Key Tracking
     useEffect(() => {
@@ -98,13 +121,13 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
     const getValueFromCoordinates = (svgX: number, svgY: number) => {
         const innerWidth = width - 2 * padding;
         const innerHeight = height - 2 * padding;
-        
+
         let xPercent = ((svgX - padding) / innerWidth) * 100;
         let value = 10 * (height - padding - svgY) / innerHeight;
-        
+
         xPercent = Math.max(0, Math.min(100, xPercent));
         value = Math.max(0, Math.min(10, value));
-        
+
         return { x: xPercent, value };
     };
 
@@ -112,15 +135,18 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
         // Restore arc based on current episode count
         const count = currentEpisodes.length > 0 ? currentEpisodes.length : 3;
         const newArc: ArcPoint[] = [];
-        
+        const step = 100 / count;
+
         for (let i = 0; i < count; i++) {
-            const x = count > 1 ? (i / (count - 1)) * 100 : 50;
+            // Center the point in the episode band
+            const x = (i + 0.5) * step;
+
             // Create a default "Rising Action" curve
             const progress = i / Math.max(1, count - 1);
-            
+
             newArc.push({
                 id: Date.now() + i,
-                label: currentEpisodes[i]?.title || `${t('episode')} ${i + 1}`,
+                label: currentEpisodes[i]?.title || `${t('episode')} ${i}`,
                 x: Number(x.toFixed(1)),
                 tension: Number((2 + progress * 6).toFixed(1)), // 2 -> 8
                 conflict: Number((1 + progress * 7).toFixed(1)), // 1 -> 8
@@ -140,23 +166,23 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
             const scaleY = height / rect.height;
             const svgX = (e.clientX - rect.left) * scaleX;
             const svgY = (e.clientY - rect.top) * scaleY;
-            
+
             const { x, value } = getValueFromCoordinates(svgX, svgY);
-            
+
             // Calculate interpolated values for ALL curves at this X
             const interpolatedValues = { tension: 0, emotion: 0, conflict: 0 };
             (['tension', 'emotion', 'conflict'] as const).forEach(prop => {
                 const sortedPoints = [...points].sort((a, b) => (a.x || 0) - (b.x || 0));
                 let idx = sortedPoints.findIndex(p => (p.x || 0) >= x);
                 if (idx === -1) idx = sortedPoints.length;
-                
+
                 const p1 = sortedPoints[Math.max(0, idx - 1)];
                 const p2 = sortedPoints[Math.min(idx, sortedPoints.length - 1)];
-                
+
                 if (p1 && p2 && p1 !== p2) {
                     const range = (p2.x || 0) - (p1.x || 0);
                     const t = ((x - (p1.x || 0)) / range);
-                    
+
                     if (curveType === 'linear' || curveType === 'step') {
                         interpolatedValues[prop] = interpolateLinear(p1[prop], p2[prop], t);
                     } else {
@@ -167,7 +193,7 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                 } else if (p1) {
                     interpolatedValues[prop] = p1[prop];
                 } else {
-                    interpolatedValues[prop] = 5; 
+                    interpolatedValues[prop] = 5;
                 }
             });
 
@@ -187,16 +213,16 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                 // Update existing point
                 const newArc = [...points];
                 const pt = newArc[nearbyIndex];
-                
+
                 // Update value for the clicked curve
                 pt[targetCurve] = Number(value.toFixed(1));
-                
+
                 // Reveal this curve's node
                 const currentCurves = pt.modifiedCurves || ['tension', 'emotion', 'conflict'];
                 if (!currentCurves.includes(targetCurve)) {
                     pt.modifiedCurves = [...currentCurves, targetCurve];
                 }
-                
+
                 setArc(newArc);
             } else {
                 // Create new point (Intermediate Beat)
@@ -224,15 +250,15 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
 
     const handleMouseDown = (index: number, type: 'tension' | 'emotion' | 'conflict', e: React.MouseEvent) => {
         e.stopPropagation();
-        
+
         // Delete Logic: Shift + D + Click (on node)
         if (keysPressed.current.shift && keysPressed.current.d) {
             const targetPoint = points[index];
             const currentCurves = targetPoint.modifiedCurves || ['tension', 'emotion', 'conflict'];
-            
+
             // 1. Remove the specific curve from visibility
             const newCurves = currentCurves.filter(c => c !== type);
-            
+
             if (newCurves.length > 0) {
                 // Point still has other curves, just update modifiedCurves
                 const newArc = [...points];
@@ -260,15 +286,15 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
         const rect = svgRef.current.getBoundingClientRect();
         const scaleX = width / rect.width;
         const scaleY = height / rect.height;
-        
+
         const svgX = (e.clientX - rect.left) * scaleX;
         const svgY = (e.clientY - rect.top) * scaleY;
-        
+
         const { x, value } = getValueFromCoordinates(svgX, svgY);
-        
-        const newArc = [...points]; 
+
+        const newArc = [...points];
         const point = newArc[activePoint.index];
-        
+
         // Update Value (Y)
         newArc[activePoint.index] = {
             ...point,
@@ -314,18 +340,18 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
         if (curveType === 'linear') {
             return coords.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
         }
-        
+
         if (curveType === 'step') {
             let path = `M ${coords[0].x} ${coords[0].y}`;
             for (let i = 0; i < coords.length - 1; i++) {
-                path += ` H ${coords[i+1].x} V ${coords[i+1].y}`;
+                path += ` H ${coords[i + 1].x} V ${coords[i + 1].y}`;
             }
             return path;
         }
 
         // Catmull-Rom Spline conversion to Cubic Bezier
         let path = `M ${coords[0].x} ${coords[0].y}`;
-        
+
         for (let i = 0; i < coords.length - 1; i++) {
             const p0 = coords[Math.max(i - 1, 0)];
             const p1 = coords[i];
@@ -346,7 +372,7 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto" ref={containerRef}>
-             <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+            <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <div>
                         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -354,13 +380,13 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                             {t('narrativeArcTitle')}
                         </h2>
                         <p className="text-gray-400 text-sm mt-1">
-                            {t('narrativeArcDescription')} 
+                            {t('narrativeArcDescription')}
                             <span className="block text-xs text-gray-500 mt-1">
                                 Shift + N + Click to Add Node | Shift + D + Click Node to Delete
                             </span>
                         </p>
                     </div>
-                    
+
                     <div className="flex items-center gap-4">
                         <button onClick={handleReset} className="px-3 py-1.5 bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded text-xs font-bold uppercase tracking-wider border border-red-900/50 transition-colors">
                             {t('resetArc')}
@@ -380,11 +406,11 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                         <div className="w-3 h-3 rounded-full bg-red-500"></div>
                         <span className="text-gray-300">{t('arcTension')}</span>
                     </div>
-                        <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-cyan-500"></div>
                         <span className="text-gray-300">{t('arcEmotion')}</span>
                     </div>
-                        <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
                         <span className="text-gray-300">{t('arcConflict')}</span>
                     </div>
@@ -392,15 +418,34 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
 
                 {arc.length > 0 ? (
                     <div className="w-full overflow-x-auto relative select-none">
-                        <svg 
+                        <svg
                             ref={svgRef}
-                            viewBox={`0 0 ${width} ${height}`} 
+                            viewBox={`0 0 ${width} ${height}`}
                             className="w-full h-auto bg-gray-900/50 rounded-lg cursor-crosshair min-w-[600px]"
                             onClick={handleSvgClick}
                             onMouseMove={handleMouseMove}
                             onMouseUp={handleMouseUp}
                             onMouseLeave={handleMouseUp}
                         >
+                            {/* Background Shading for Episodes */}
+                            {Array.from({ length: currentEpisodes.length || 1 }).map((_, i) => {
+                                const count = currentEpisodes.length || 1;
+                                const step = 100 / count;
+                                const xStart = padding + (i * step / 100) * (width - 2 * padding);
+                                const bandWidth = (step / 100) * (width - 2 * padding);
+
+                                return (
+                                    <rect
+                                        key={`bg-${i}`}
+                                        x={xStart}
+                                        y={padding}
+                                        width={bandWidth}
+                                        height={height - 2 * padding}
+                                        fill={i % 2 === 0 ? 'transparent' : 'rgba(16, 185, 129, 0.05)'}
+                                    />
+                                );
+                            })}
+
                             {/* Background Grid */}
                             {[0, 2.5, 5, 7.5, 10].map(val => {
                                 const y = height - padding - (val / 10) * (height - 2 * padding);
@@ -411,12 +456,17 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                                     </g>
                                 );
                             })}
-                            
-                            {/* Vertical Grid (Time) */}
-                            {[0, 25, 50, 75, 100].map(val => {
+
+                            {/* Vertical Grid (Episode Boundaries) */}
+                            {Array.from({ length: (currentEpisodes.length || 1) + 1 }).map((_, i) => {
+                                const count = currentEpisodes.length || 1;
+                                const val = i * (100 / count);
                                 const x = padding + (val / 100) * (width - 2 * padding);
                                 return (
-                                    <line key={`v-${val}`} x1={x} y1={padding} x2={x} y2={height - padding} stroke="#374151" strokeWidth="1" strokeDasharray="4" opacity="0.3" />
+                                    <g key={`v-${i}`}>
+                                        <line x1={x} y1={padding} x2={x} y2={height - padding} stroke="#374151" strokeWidth="1" strokeDasharray="4" opacity="0.5" />
+                                        {/* Episode Number Label at bottom of band? No, maybe just the grid lines are enough */}
+                                    </g>
                                 );
                             })}
 
@@ -430,7 +480,7 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                                 const tCoord = getCoordinates(point.x || 0, point.tension);
                                 const eCoord = getCoordinates(point.x || 0, point.emotion);
                                 const cCoord = getCoordinates(point.x || 0, point.conflict);
-                                
+
                                 const isActiveTension = activePoint?.index === i && activePoint?.type === 'tension';
                                 const isActiveEmotion = activePoint?.index === i && activePoint?.type === 'emotion';
                                 const isActiveConflict = activePoint?.index === i && activePoint?.type === 'conflict';
@@ -441,19 +491,19 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
 
                                 return (
                                     <g key={point.id}>
-                                        {/* Vertical Guide Line for Node (Only if dragging one of them or all visible) */}
-                                        <line 
-                                            x1={tCoord.x} y1={height - padding} x2={tCoord.x} y2={padding} 
-                                            stroke={point.isEpisodeAnchor ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)"} 
-                                            strokeWidth={point.isEpisodeAnchor ? 2 : 1} 
-                                            strokeDasharray={point.isEpisodeAnchor ? "" : "4"}
+                                        {/* Vertical Guide Line for Node */}
+                                        <line
+                                            x1={tCoord.x} y1={height - padding} x2={tCoord.x} y2={padding}
+                                            stroke={point.isEpisodeAnchor ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.03)"}
+                                            strokeWidth={point.isEpisodeAnchor ? 1 : 0.5}
+                                            strokeDasharray={point.isEpisodeAnchor ? "" : "2"}
                                             className="pointer-events-none"
                                         />
 
                                         {/* Tension Control */}
                                         {showTension && (
-                                            <circle 
-                                                cx={tCoord.x} cy={tCoord.y} r={isActiveTension ? 8 : 6} 
+                                            <circle
+                                                cx={tCoord.x} cy={tCoord.y} r={isActiveTension ? 8 : 6}
                                                 fill="#ef4444" stroke="white" strokeWidth="2"
                                                 className={`cursor-grab hover:r-8 transition-all ${point.isEpisodeAnchor ? '' : 'hover:fill-red-400'}`}
                                                 onMouseDown={(e) => handleMouseDown(i, 'tension', e)}
@@ -461,8 +511,8 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                                         )}
                                         {/* Emotion Control */}
                                         {showEmotion && (
-                                            <circle 
-                                                cx={eCoord.x} cy={eCoord.y} r={isActiveEmotion ? 8 : 6} 
+                                            <circle
+                                                cx={eCoord.x} cy={eCoord.y} r={isActiveEmotion ? 8 : 6}
                                                 fill="#06b6d4" stroke="white" strokeWidth="2"
                                                 className={`cursor-grab hover:r-8 transition-all ${point.isEpisodeAnchor ? '' : 'hover:fill-cyan-400'}`}
                                                 onMouseDown={(e) => handleMouseDown(i, 'emotion', e)}
@@ -470,26 +520,26 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                                         )}
                                         {/* Conflict Control */}
                                         {showConflict && (
-                                            <circle 
-                                                cx={cCoord.x} cy={cCoord.y} r={isActiveConflict ? 8 : 6} 
+                                            <circle
+                                                cx={cCoord.x} cy={cCoord.y} r={isActiveConflict ? 8 : 6}
                                                 fill="#f59e0b" stroke="white" strokeWidth="2"
                                                 className={`cursor-grab hover:r-8 transition-all ${point.isEpisodeAnchor ? '' : 'hover:fill-yellow-400'}`}
                                                 onMouseDown={(e) => handleMouseDown(i, 'conflict', e)}
                                             />
                                         )}
-                                        
+
                                         {/* Label */}
                                         {(showTension || showEmotion || showConflict) && (
-                                            <text 
-                                                x={tCoord.x} 
-                                                y={height - 15} 
-                                                fill={point.isEpisodeAnchor ? "#FFFFFF" : "#9CA3AF"} 
-                                                fontSize={point.isEpisodeAnchor ? "12" : "10"} 
+                                            <text
+                                                x={tCoord.x}
+                                                y={height - 15}
+                                                fill={point.isEpisodeAnchor ? "#FFFFFF" : "#6B7280"}
+                                                fontSize={point.isEpisodeAnchor ? "12" : "10"}
                                                 fontWeight={point.isEpisodeAnchor ? "bold" : "normal"}
-                                                textAnchor="middle" 
+                                                textAnchor="middle"
                                                 style={{ pointerEvents: 'none' }}
                                             >
-                                                {point.label || (point.isEpisodeAnchor ? `${i + 1}` : '')}
+                                                {point.label === 'Beat' ? '' : (point.label || (point.isEpisodeAnchor ? `${i}` : ''))}
                                             </text>
                                         )}
                                     </g>
@@ -502,10 +552,10 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                         {t('arcNoData')}
                     </div>
                 )}
-                
+
                 <div className="mt-6 flex justify-end">
-                    <button 
-                        onClick={handleRewrite} 
+                    <button
+                        onClick={handleRewrite}
                         disabled={isRewriting || arc.length === 0}
                         className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 h-10 px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20"
                     >
@@ -513,7 +563,7 @@ export const NarrativeArcEditor: React.FC<NarrativeArcEditorProps> = ({
                         {isRewriting ? t('rewritingStory') : t('rewriteStoryFromArc')}
                     </button>
                 </div>
-             </div>
+            </div>
         </div>
     );
 };

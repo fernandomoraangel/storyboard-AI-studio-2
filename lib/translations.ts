@@ -425,6 +425,17 @@ export const translations = {
     redefineSettings: "Redefine",
     acceptChanges: "Accept",
 
+    // Settings
+    settingsTitle: "AI Provider Settings",
+    textProvider: "Text Provider",
+    mediaProvider: "Media Provider",
+    ollamaUrl: "Ollama URL",
+    ollamaModel: "Ollama Model",
+    comfyuiUrl: "ComfyUI URL",
+    geminiApiKey: "Gemini API Key",
+    saveSettings: "Save Settings",
+    settingsSaved: "Settings saved successfully.",
+
     // Chat
     chatInitial:
       "Hello! I'm your storyboard assistant. I can help you create scenes, characters, and refine details. How can I help you today?",
@@ -1187,6 +1198,17 @@ export const translations = {
     rejectChanges: "Rechazar",
     redefineSettings: "Redefinir",
     acceptChanges: "Aceptar",
+
+    // Settings
+    settingsTitle: "Configuración de Proveedores IA",
+    textProvider: "Proveedor de Texto",
+    mediaProvider: "Proveedor de Medios",
+    ollamaUrl: "URL de Ollama",
+    ollamaModel: "Modelo de Ollama",
+    comfyuiUrl: "URL de ComfyUI",
+    geminiApiKey: "API Key de Gemini",
+    saveSettings: "Guardar Configuración",
+    settingsSaved: "Configuración guardada exitosamente.",
 
     // Chat
     chatInitial:

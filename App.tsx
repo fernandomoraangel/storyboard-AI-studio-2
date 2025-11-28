@@ -30,6 +30,7 @@ import {
 } from "./lib/db";
 
 // Components
+import { Home } from "./components/Home";
 import { Storyboard } from "./components/Storyboard";
 import { GalleryView } from "./components/GalleryView";
 import { SeriesBible } from "./components/SeriesBible";
@@ -71,6 +72,7 @@ import {
   SettingsIcon,
   GalleryIcon,
   CameraIcon,
+  HomeIcon,
 } from "./components/icons";
 import {
   ensureStoryConsistency,
@@ -137,7 +139,7 @@ export const App: React.FC = () => {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
 
   const [activeEpisodeId, setActiveEpisodeId] = useState<number | null>(null);
-  const [workflowPhase, setWorkflowPhase] = useState("generator"); // Default start
+  const [workflowPhase, setWorkflowPhase] = useState("home"); // Default start
   const [bibleTab, setBibleTab] = useState<"general" | "characters" | "style">(
     "general"
   );
@@ -365,7 +367,7 @@ export const App: React.FC = () => {
       setEpisodes([]);
 
       setActiveEpisodeId(null);
-      setWorkflowPhase("generator");
+      setWorkflowPhase("home");
       setBibleTab("general");
 
       // Force component remounting
@@ -516,6 +518,7 @@ export const App: React.FC = () => {
   const activeEpisode = episodes.find((e) => e.id === activeEpisodeId);
 
   const menuItems = [
+    { id: "home", icon: HomeIcon, label: t("home") },
     { id: "generator", icon: LayoutGridIcon, label: t("storyGeneratorTab") },
     {
       id: "bible",
@@ -766,6 +769,9 @@ export const App: React.FC = () => {
           {/* CONTENT AREA */}
           <main className="flex-1 overflow-y-auto p-6 scroll-smooth bg-gray-900 relative">
             <div className="max-w-7xl mx-auto">
+              {workflowPhase === "home" && (
+                <Home setWorkflowPhase={setWorkflowPhase} />
+              )}
               {workflowPhase === "bible" && (
                 <SeriesBible
                   key={resetKey}

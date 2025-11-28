@@ -13,6 +13,7 @@ export interface Options {
   filmGrainOptions: string[];
   transitionTypeOptions: string[];
   storyboardStyleOptions: { [key: string]: string };
+  mediumOptions: { [key: string]: string };
   aspectRatioOptions: { [key: string]: string };
   narrativeStructureOptions: { [key: string]: string };
   structureSubOptions?: { [key: string]: string[] };
@@ -47,7 +48,29 @@ export const translations = {
     projectSaved: "Project saved successfully.",
     coCreationError: "Co-creation failed.",
 
+    // Home / Workflow
+    welcomeTitle: "Welcome to Storyboard AI Studio",
+    setup: "Setup",
+    ideation: "Ideation",
+    structure: "Structure",
+    refinement: "Refinement",
+    visualization: "Visualization",
+    production: "Production",
+    tools: "Tools",
+    creativeTeamDesc: "Define the AI personas (Director, Cinematographer) that will guide the style of your project.",
+    authorsDesc: "Manage the human authors and contributors of the project.",
+    storyGeneratorDesc: "Generate story ideas, plots, and scripts using AI assistance.",
+    narrativeArcDesc: "Visualize and adjust the emotional and dramatic tension of your story.",
+    seriesBibleDesc: "Define the core elements: Logline, Synopsis, Characters, and Tone.",
+    episodesDesc: "Manage the list of episodes and their individual scenes.",
+    visualOrganizerDesc: "Reorder scenes and shots using a drag-and-drop interface.",
+    storyboardDesc: "View and edit the visual storyboard, shot by shot.",
+    galleryViewDesc: "Browse all generated images in a gallery format.",
+    videoGeneratorDesc: "Turn your storyboard frames into video clips using AI.",
+    utilitiesDesc: "Export your project to PDF, Frame.io, or manage data.",
+
     // Tabs
+    home: "Home",
     storyGeneratorTab: "Story Generator",
     storyBoardTab: "Storyboard",
     outlineTab: "Story Bible",
@@ -70,6 +93,7 @@ export const translations = {
     noAuthors: "No authors added yet.",
 
     // Story Generator
+    medium: "Medium",
     storyIdea: "Story Idea",
     storyIdeaPlaceholder:
       "e.g., A retired detective is pulled back in for one last case involving AI...",
@@ -607,6 +631,14 @@ export const translations = {
         Sepia: "Vintage Sepia",
         Custom: "Custom Style (Use Style Transfer)",
       },
+      mediumOptions: {
+        movie: "Movie",
+        tvSeries: "TV Series",
+        videoGame: "Video Game",
+        immersiveExperience: "Immersive Experience",
+        arExperience: "AR Experience",
+        podcast: "Podcast",
+      },
       aspectRatioOptions: {
         "16:9": "16:9 (Widescreen)",
         "2.35:1": "2.35:1 (CinemaScope)",
@@ -828,7 +860,29 @@ export const translations = {
     projectSaved: "Proyecto guardado exitosamente.",
     coCreationError: "Falló la co-creación.",
 
+    // Home / Workflow
+    welcomeTitle: "Bienvenido a Storyboard AI Studio",
+    setup: "Configuración",
+    ideation: "Ideación",
+    structure: "Estructura",
+    refinement: "Refinamiento",
+    visualization: "Visualización",
+    production: "Producción",
+    tools: "Herramientas",
+    creativeTeamDesc: "Define las personas de IA (Director, Cineasta) que guiarán el estilo de tu proyecto.",
+    authorsDesc: "Gestiona los autores humanos y colaboradores del proyecto.",
+    storyGeneratorDesc: "Genera ideas de historias, tramas y guiones con asistencia de IA.",
+    narrativeArcDesc: "Visualiza y ajusta la tensión emocional y dramática de tu historia.",
+    seriesBibleDesc: "Define los elementos centrales: Logline, Sinopsis, Personajes y Tono.",
+    episodesDesc: "Gestiona la lista de episodios y sus escenas individuales.",
+    visualOrganizerDesc: "Reordena escenas y planos usando una interfaz de arrastrar y soltar.",
+    storyboardDesc: "Ver y editar el guion gráfico visual, plano por plano.",
+    galleryViewDesc: "Explora todas las imágenes generadas en formato de galería.",
+    videoGeneratorDesc: "Convierte tus cuadros del guion gráfico en clips de video usando IA.",
+    utilitiesDesc: "Exporta tu proyecto a PDF, Frame.io o gestiona datos.",
+
     // Tabs
+    home: "Inicio",
     storyGeneratorTab: "Generador de Historias",
     storyBoardTab: "Guion Gráfico",
     outlineTab: "Biblia de Historia",
@@ -851,6 +905,7 @@ export const translations = {
     noAuthors: "Aún no hay autores agregados.",
 
     // Story Generator
+    medium: "Medio",
     storyIdea: "Idea de la Historia",
     storyIdeaPlaceholder:
       "ej: Un detective retirado vuelve para un último caso con IA...",
@@ -1383,6 +1438,14 @@ export const translations = {
         Cyberpunk: "Cyberpunk",
         Sepia: "Sepia Vintage",
         Custom: "Estilo Personalizado",
+      },
+      mediumOptions: {
+        movie: "Película",
+        tvSeries: "Serie televisiva",
+        videoGame: "Video juego",
+        immersiveExperience: "Experiencia inmersiva",
+        arExperience: "Experiencia RA",
+        podcast: "Podcast",
       },
       aspectRatioOptions: {
         "16:9": "16:9 (Panorámico)",

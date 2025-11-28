@@ -58,6 +58,7 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
 }) => {
   const { t, language, options } = useLanguage();
   const [prompt, setPrompt] = useState("");
+  const [medium, setMedium] = useState("movie");
   const [sceneCount, setSceneCount] = useState<number | "">(3);
   const [episodeCount, setEpisodeCount] = useState<number | "">(1);
   const [characterCount, setCharacterCount] = useState<number | "">("");
@@ -595,7 +596,29 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
                 placeholder={t("storyIdeaPlaceholder")}
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label
+                  htmlFor="medium"
+                  className="block text-sm font-medium text-gray-400 mb-1"
+                >
+                  {t("medium")}
+                </label>
+                <select
+                  id="medium"
+                  value={medium}
+                  onChange={(e) => setMedium(e.target.value)}
+                  className="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6 h-10"
+                >
+                  {Object.entries(options.mediumOptions).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
               <div>
                 <label
                   htmlFor="storyboard-style"

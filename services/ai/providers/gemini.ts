@@ -15,12 +15,16 @@ const cleanJson = (text: string) => {
 export class GeminiProvider implements TextGenerationProvider, ImageGenerationProvider, VideoGenerationProvider {
     private ai: GoogleGenAI;
     private apiKey: string;
+    private textModel: string;
+    private mediaModel: string;
     private static lastRequestTime: number = 0;
     private static readonly MIN_REQUEST_INTERVAL = 4500; // 4.5 seconds between requests (safe for 15 RPM)
 
     constructor(config: AIProviderConfig) {
         this.apiKey = config.apiKey || process.env.API_KEY || '';
         this.ai = new GoogleGenAI({ apiKey: this.apiKey });
+        this.textModel = config.textModel || 'gemini-2.0-flash-exp';
+        this.mediaModel = config.mediaModel || 'imagen-2';
     }
 
     private async waitForRateLimit(): Promise<void> {
@@ -75,7 +79,7 @@ export class GeminiProvider implements TextGenerationProvider, ImageGenerationPr
 
     async generateContent(prompt: string, systemInstruction?: string, options?: any): Promise<string> {
         const response = await this.generateContentWithRetry({
-            model: 'gemini-2.0-flash-exp',
+            model: this.textModel,
             contents: prompt,
             config: { systemInstruction, ...options }
         });
@@ -84,7 +88,7 @@ export class GeminiProvider implements TextGenerationProvider, ImageGenerationPr
 
     async generateJSON<T>(prompt: string, schema: any, systemInstruction?: string, options?: any): Promise<T> {
         const response = await this.generateContentWithRetry({
-            model: 'gemini-2.0-flash-exp',
+            model: this.textModel,
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
@@ -98,7 +102,7 @@ export class GeminiProvider implements TextGenerationProvider, ImageGenerationPr
 
     async createChat(systemInstruction: string, tools?: any[]): Promise<any> {
         return this.ai.chats.create({
-            model: 'gemini-2.0-flash-exp',
+            model: this.textModel,
             config: {
                 systemInstruction: systemInstruction,
                 tools: tools ? [{ functionDeclarations: tools }] : undefined,
@@ -114,9 +118,47 @@ export class GeminiProvider implements TextGenerationProvider, ImageGenerationPr
     async generateImage(prompt: string, aspectRatio: string): Promise<string> {
         await this.waitForRateLimit(); // Wait to respect rate limits
 
+        // Handle Gemini models (multimodal generation) vs Imagen models (image-only generation)
+        if (this.mediaModel.toLowerCase().startsWith('gemini')) {
+            try {
+                const response = await this.ai.models.generateContent({
+                    model: this.mediaModel,
+                    contents: [
+                        {
+                            role: 'user',
+                            parts: [{ text: `Generate an image of: ${prompt}` }]
+                        }
+                    ],
+                    config: {
+                        // responseMimeType: 'image/jpeg' // Not supported by gemini-2.0-flash-exp yet
+                    }
+                });
+
+                // Check for inline data (base64 image)
+                if (response.candidates?.[0]?.content?.parts) {
+                    for (const part of response.candidates[0].content.parts) {
+                        if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+                            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                        }
+                    }
+                }
+
+                throw new Error("The Gemini model generated text instead of an image. This model might not support native image generation yet. Please try an 'imagen' model or ComfyUI.");
+
+            } catch (error: any) {
+                console.error("Gemini Native Image Generation Error:", error);
+                const errorMessage = (JSON.stringify(error) || '').toLowerCase();
+                if (errorMessage.includes('location') || errorMessage.includes('region') || errorMessage.includes('not supported')) {
+                    throw new Error("Image generation is not supported in your region with this model. Please try ComfyUI (Local).");
+                }
+                throw error;
+            }
+        }
+
+        // Default: Use Imagen models
         try {
             const response = await this.ai.models.generateImages({
-                model: 'imagen-3.0-generate-001',
+                model: this.mediaModel,
                 prompt: prompt,
                 config: { numberOfImages: 1, aspectRatio: aspectRatio as any }
             });
@@ -137,6 +179,9 @@ export class GeminiProvider implements TextGenerationProvider, ImageGenerationPr
             if (isQuotaError) {
                 console.warn("Quota exceeded for image generation.");
                 throw new Error("Quota exceeded for image generation.");
+            }
+            if (errorMessage.includes('location') || errorMessage.includes('region') || errorMessage.includes('not supported')) {
+                throw new Error("Image generation is not supported in your region with this model. Please try ComfyUI (Local).");
             }
             throw error;
         }
@@ -185,6 +230,32 @@ export class GeminiProvider implements TextGenerationProvider, ImageGenerationPr
         } catch (e) {
             console.error("Gemini Video Generation Error:", e);
             throw e;
+        }
+    }
+
+    async listModels(): Promise<string[]> {
+        try {
+            const response = await this.ai.models.list();
+            const models: string[] = [];
+            // @ts-ignore
+            for (const model of response) {
+                if (model.name) {
+                    models.push(`${model.name} (${model.supportedGenerationMethods?.join(', ')})`);
+                }
+            }
+            return models;
+        } catch (e: any) {
+            console.warn("Failed to list models (likely due to region/permissions). Using default list.", e);
+            // Return default models if API fails (e.g. due to location restrictions)
+            return [
+                "models/gemini-2.0-flash-exp (generateContent, generateImages)",
+                "models/gemini-1.5-pro (generateContent)",
+                "models/gemini-1.5-flash (generateContent)",
+                "models/gemini-1.0-pro (generateContent)",
+                "models/imagen-3.0-generate-001 (image, generateImages)",
+                "models/imagen-3.0-fast-generate-001 (image, generateImages)",
+                "models/imagen-2 (image, generateImages)"
+            ];
         }
     }
 }

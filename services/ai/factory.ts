@@ -37,7 +37,10 @@ export class AIProviderFactory {
                 ollamaUrl: localStorage.getItem('OLLAMA_URL') || process.env.NEXT_PUBLIC_OLLAMA_URL || 'http://localhost:11434',
                 ollamaModel: localStorage.getItem('OLLAMA_MODEL') || process.env.NEXT_PUBLIC_OLLAMA_MODEL || 'llama3',
                 comfyuiUrl: localStorage.getItem('COMFYUI_URL') || process.env.NEXT_PUBLIC_COMFYUI_URL || 'http://127.0.0.1:8188',
+                comfyuiModel: localStorage.getItem('COMFYUI_MODEL') || 'v1-5-pruned-emaonly.ckpt',
                 apiKey: localStorage.getItem('GEMINI_API_KEY') || process.env.API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
+                textModel: localStorage.getItem('GEMINI_TEXT_MODEL') || process.env.NEXT_PUBLIC_GEMINI_TEXT_MODEL || 'gemini-2.0-flash-exp',
+                mediaModel: localStorage.getItem('GEMINI_MEDIA_MODEL') || process.env.NEXT_PUBLIC_GEMINI_MEDIA_MODEL || 'imagen-2',
             };
         }
         return {
@@ -46,7 +49,10 @@ export class AIProviderFactory {
             ollamaUrl: process.env.NEXT_PUBLIC_OLLAMA_URL || 'http://localhost:11434',
             ollamaModel: process.env.NEXT_PUBLIC_OLLAMA_MODEL || 'llama3',
             comfyuiUrl: process.env.NEXT_PUBLIC_COMFYUI_URL || 'http://127.0.0.1:8188',
+            comfyuiModel: 'v1-5-pruned-emaonly.ckpt',
             apiKey: process.env.API_KEY || '',
+            textModel: process.env.NEXT_PUBLIC_GEMINI_TEXT_MODEL || 'gemini-2.0-flash-exp',
+            mediaModel: process.env.NEXT_PUBLIC_GEMINI_MEDIA_MODEL || 'imagen-2',
         };
     }
 
@@ -57,15 +63,18 @@ export class AIProviderFactory {
                 model: config.ollamaModel
             });
         }
-        return new GeminiProvider({ apiKey: config.apiKey });
+        return new GeminiProvider({ apiKey: config.apiKey, textModel: config.textModel });
     }
 
     private createMediaProviders(config: any): { image: ImageGenerationProvider, video: VideoGenerationProvider } {
         if (config.mediaProvider === 'comfyui') {
-            const comfy = new ComfyUIProvider({ baseUrl: config.comfyuiUrl });
+            const comfy = new ComfyUIProvider({
+                baseUrl: config.comfyuiUrl,
+                comfyuiModel: config.comfyuiModel
+            });
             return { image: comfy, video: comfy };
         }
-        const gemini = new GeminiProvider({ apiKey: config.apiKey });
+        const gemini = new GeminiProvider({ apiKey: config.apiKey, mediaModel: config.mediaModel });
         return { image: gemini, video: gemini };
     }
 }

@@ -6,13 +6,17 @@ export interface AIProviderConfig {
     apiKey?: string;
     baseUrl?: string;
     model?: string;
+    textModel?: string;
+    mediaModel?: string;
+    comfyuiModel?: string;
 }
 
 export interface TextGenerationProvider {
     generateContent(prompt: string, systemInstruction?: string, options?: any): Promise<string>;
     generateJSON<T>(prompt: string, schema: any, systemInstruction?: string, options?: any): Promise<T>;
-    createChat(systemInstruction: string, tools?: any[]): Promise<any>; // Abstracting Chat type might be complex, keeping it generic for now
+    createChat(systemInstruction: string, tools?: any[]): Promise<any>;
     sendMessage(chat: any, message: string | Part[]): Promise<string>;
+    listModels?(): Promise<string[]>;
 }
 
 export interface ImageGenerationProvider {

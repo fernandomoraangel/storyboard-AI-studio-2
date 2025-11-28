@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/languageContext';
 import { SettingsIcon, CloseIcon, FloppyDiskIcon, RefreshCwIcon } from './icons';
 import { AIProviderFactory } from '../services/ai/factory';
+import { GeminiProvider } from '../services/ai/providers/gemini';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -14,7 +15,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
     const [ollamaModel, setOllamaModel] = useState('llama3');
     const [comfyuiUrl, setComfyuiUrl] = useState('http://127.0.0.1:8188');
+    const [comfyuiModel, setComfyuiModel] = useState('v1-5-pruned-emaonly.ckpt');
     const [geminiApiKey, setGeminiApiKey] = useState('');
+    const [geminiTextModel, setGeminiTextModel] = useState('gemini-2.0-flash-exp');
+    const [geminiMediaModel, setGeminiMediaModel] = useState('imagen-2');
+    const [useCustomModel, setUseCustomModel] = useState(false);
     const [message, setMessage] = useState('');
 
     // Model fetching state
@@ -30,7 +35,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             setOllamaUrl(localStorage.getItem('OLLAMA_URL') || 'http://localhost:11434');
             setOllamaModel(localStorage.getItem('OLLAMA_MODEL') || 'llama3');
             setComfyuiUrl(localStorage.getItem('COMFYUI_URL') || 'http://127.0.0.1:8188');
+            setComfyuiModel(localStorage.getItem('COMFYUI_MODEL') || 'v1-5-pruned-emaonly.ckpt');
             setGeminiApiKey(localStorage.getItem('GEMINI_API_KEY') || '');
+            setGeminiTextModel(localStorage.getItem('GEMINI_TEXT_MODEL') || 'gemini-2.0-flash-exp');
+            setGeminiMediaModel(localStorage.getItem('GEMINI_MEDIA_MODEL') || 'imagen-2');
         }
     }, []);
 
@@ -92,6 +100,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         }
     };
 
+    const fetchComfyUIModels = async () => {
+        setIsFetchingModels(true);
+        setFetchError('');
+        try {
+            const cleanUrl = comfyuiUrl.replace(/\/$/, '');
+            const response = await fetch(`${cleanUrl}/object_info/CheckpointLoaderSimple`);
+            if (!response.ok) throw new Error('Failed to fetch ComfyUI models');
+
+            const data = await response.json();
+            const models = data?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0];
+
+            if (Array.isArray(models)) {
+                setAvailableModels(models);
+                if (models.length > 0) {
+                    setFetchError(`✅ Found ${models.length} models.`);
+                    if (!models.includes(comfyuiModel)) {
+                        setComfyuiModel(models[0]);
+                    }
+                } else {
+                    setFetchError('⚠️ No models found in ComfyUI.');
+                }
+            } else {
+                throw new Error('Invalid response format from ComfyUI');
+            }
+        } catch (e) {
+            console.error("Failed to fetch ComfyUI models:", e);
+            setFetchError('❌ Failed to fetch models. Check URL/CORS.');
+        } finally {
+            setIsFetchingModels(false);
+        }
+    };
+
+    const fetchGeminiModels = async () => {
+        if (!geminiApiKey) {
+            setFetchError('⚠️ Please enter a Gemini API Key first.');
+            return;
+        }
+        setIsFetchingModels(true);
+        setFetchError('');
+        try {
+            const provider = new GeminiProvider({ apiKey: geminiApiKey });
+            const models = await provider.listModels();
+            setAvailableModels(models);
+
+            if (models.length > 0) {
+                setFetchError(`✅ Found ${models.length} models (or defaults).`);
+            } else {
+                setFetchError('⚠️ No models found.');
+            }
+        } catch (e: any) {
+            console.error("Failed to fetch Gemini models", e);
+            setFetchError('❌ Failed to fetch models. Check API Key.');
+        } finally {
+            setIsFetchingModels(false);
+        }
+    };
+
     const handleSave = () => {
         if (typeof window !== 'undefined') {
             localStorage.setItem('AI_PROVIDER_TEXT', textProvider);
@@ -99,7 +164,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             localStorage.setItem('OLLAMA_URL', ollamaUrl);
             localStorage.setItem('OLLAMA_MODEL', ollamaModel);
             localStorage.setItem('COMFYUI_URL', comfyuiUrl);
+            localStorage.setItem('COMFYUI_MODEL', comfyuiModel);
             localStorage.setItem('GEMINI_API_KEY', geminiApiKey);
+            localStorage.setItem('GEMINI_TEXT_MODEL', geminiTextModel);
+            localStorage.setItem('GEMINI_MEDIA_MODEL', geminiMediaModel);
 
             // Reset the factory to reload config
             AIProviderFactory.resetInstance();
@@ -214,6 +282,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 onChange={(e) => setComfyuiUrl(e.target.value)}
                                 className="block w-full rounded-md border-0 bg-gray-700/30 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm"
                             />
+
+                            <div className="flex justify-between items-center mb-1 mt-2">
+                                <label className="block text-sm font-medium text-gray-400">Checkpoint Name</label>
+                                <button
+                                    onClick={fetchComfyUIModels}
+                                    disabled={isFetchingModels}
+                                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center disabled:opacity-50"
+                                >
+                                    <RefreshCwIcon className={`w-3 h-3 mr-1 ${isFetchingModels ? 'animate-spin' : ''}`} />
+                                    Fetch Models
+                                </button>
+                            </div>
+
+                            {availableModels.length > 0 ? (
+                                <select
+                                    value={comfyuiModel}
+                                    onChange={(e) => setComfyuiModel(e.target.value)}
+                                    className="block w-full rounded-md border-0 bg-gray-700/30 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm"
+                                >
+                                    {availableModels.map(model => (
+                                        <option key={model} value={model}>{model}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input
+                                    type="text"
+                                    value={comfyuiModel}
+                                    onChange={(e) => setComfyuiModel(e.target.value)}
+                                    placeholder="e.g. v1-5-pruned-emaonly.ckpt"
+                                    className="block w-full rounded-md border-0 bg-gray-700/30 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm"
+                                />
+                            )}
+                            {fetchError && <p className="text-xs text-yellow-400 mt-1">{fetchError}</p>}
                         </div>
                     )}
 
@@ -226,8 +327,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 value={geminiApiKey}
                                 onChange={(e) => setGeminiApiKey(e.target.value)}
                                 placeholder="Leave empty to use env var"
-                                className="block w-full rounded-md border-0 bg-gray-700/50 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm"
+                                className="block w-full rounded-md border-0 bg-gray-700/50 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm mb-2"
                             />
+
+                            <div className="flex justify-between items-center mb-1 mt-4">
+                                <label className="block text-sm font-medium text-gray-400">Gemini Models</label>
+                                <div className="flex items-center gap-2">
+                                    <label className="flex items-center text-xs text-gray-400 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={useCustomModel}
+                                            onChange={(e) => setUseCustomModel(e.target.checked)}
+                                            className="mr-1 rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        Custom
+                                    </label>
+                                    <button
+                                        onClick={fetchGeminiModels}
+                                        disabled={isFetchingModels || !geminiApiKey || useCustomModel}
+                                        className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center disabled:opacity-50"
+                                    >
+                                        <RefreshCwIcon className={`w-3 h-3 mr-1 ${isFetchingModels ? 'animate-spin' : ''}`} />
+                                        Fetch
+                                    </button>
+                                </div>
+                            </div>
+
+                            {useCustomModel ? (
+                                <div className="space-y-3 pl-2 border-l-2 border-indigo-500/20 my-2">
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Text Model ID</label>
+                                        <input
+                                            type="text"
+                                            value={geminiTextModel}
+                                            onChange={(e) => setGeminiTextModel(e.target.value)}
+                                            placeholder="e.g. gemini-1.5-pro"
+                                            className="block w-full rounded-md border-0 bg-gray-700/30 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Media Model ID</label>
+                                        <input
+                                            type="text"
+                                            value={geminiMediaModel}
+                                            onChange={(e) => setGeminiMediaModel(e.target.value)}
+                                            placeholder="e.g. imagen-3.0-generate-001"
+                                            className="block w-full rounded-md border-0 bg-gray-700/30 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-xs"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (availableModels.length > 0 && (
+                                <div className="space-y-3 pl-2 border-l-2 border-indigo-500/20 my-2">
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Text Model</label>
+                                        <select
+                                            value={geminiTextModel}
+                                            onChange={(e) => setGeminiTextModel(e.target.value)}
+                                            className="block w-full rounded-md border-0 bg-gray-700/30 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-xs"
+                                        >
+                                            {availableModels.filter(m => m.includes('generateContent')).map(model => {
+                                                const name = model.split(' ')[0].replace('models/', '');
+                                                return <option key={name} value={name}>{name}</option>;
+                                            })}
+                                            <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp (Default)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Media Model</label>
+                                        <select
+                                            value={geminiMediaModel}
+                                            onChange={(e) => setGeminiMediaModel(e.target.value)}
+                                            className="block w-full rounded-md border-0 bg-gray-700/30 py-1.5 px-3 text-white shadow-sm ring-1 ring-inset ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-xs"
+                                        >
+                                            {availableModels.filter(m => m.includes('imagen') || m.includes('generateImage') || m.includes('generateImages')).map(model => {
+                                                const name = model.split(' ')[0].replace('models/', '');
+                                                return <option key={name} value={name}>{name}</option>;
+                                            })}
+                                            <option value="imagen-2">imagen-2 (Default)</option>
+                                            <option value="imagen-3.0-generate-001">imagen-3.0-generate-001</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            ))}
+                            {fetchError && <p className="text-xs text-yellow-400 mt-1">{fetchError}</p>}
                         </div>
                     )}
 

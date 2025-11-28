@@ -4,8 +4,11 @@ import { Part } from "@google/genai";
 export class ComfyUIProvider implements ImageGenerationProvider, VideoGenerationProvider, TextGenerationProvider {
     private baseUrl: string;
 
+    private model: string;
+
     constructor(config: AIProviderConfig) {
         this.baseUrl = config.baseUrl || 'http://127.0.0.1:8188';
+        this.model = config.comfyuiModel || 'v1-5-pruned-emaonly.ckpt';
     }
 
     // Placeholder for text generation if needed, or throw
@@ -65,12 +68,6 @@ export class ComfyUIProvider implements ImageGenerationProvider, VideoGeneration
     }
 
     async generateImage(prompt: string, aspectRatio: string): Promise<string> {
-        // TODO: Load a real workflow template. For now, this is a placeholder structure.
-        // The user needs to provide a workflow that accepts a text input and outputs an image.
-        // We will assume a simple workflow exists or use a default one if we can define it safely.
-        // Since workflows are complex JSONs with node IDs, it's hard to hardcode a universal one.
-        // I will implement a basic "Text to Image" workflow JSON here, but it might fail if nodes differ.
-
         // Simplified default workflow for standard ComfyUI
         const workflow = {
             "3": {
@@ -89,7 +86,7 @@ export class ComfyUIProvider implements ImageGenerationProvider, VideoGeneration
                 "class_type": "KSampler"
             },
             "4": {
-                "inputs": { "ckpt_name": "v1-5-pruned-emaonly.ckpt" }, // User might need to change this
+                "inputs": { "ckpt_name": this.model },
                 "class_type": "CheckpointLoaderSimple"
             },
             "5": {
@@ -141,6 +138,25 @@ export class ComfyUIProvider implements ImageGenerationProvider, VideoGeneration
         // This is highly dependent on installed nodes (e.g. ComfyUI-VideoHelperSuite).
         // For now, I will throw an error asking for configuration or return a placeholder if not configured.
         throw new Error("ComfyUI Video generation requires custom workflow configuration (not yet implemented).");
+    }
+
+    async listModels(): Promise<string[]> {
+        try {
+            const response = await fetch(`${this.baseUrl}/object_info/CheckpointLoaderSimple`);
+            if (!response.ok) throw new Error("Failed to fetch ComfyUI models");
+
+            const data = await response.json();
+            // The structure is usually data.CheckpointLoaderSimple.input.required.ckpt_name[0] which is an array of strings
+            const models = data?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0];
+
+            if (Array.isArray(models)) {
+                return models;
+            }
+            return [];
+        } catch (e) {
+            console.error("Failed to list ComfyUI models:", e);
+            return [];
+        }
     }
 
     private getDimensions(aspectRatio: string): [number, number] {

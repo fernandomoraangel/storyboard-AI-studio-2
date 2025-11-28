@@ -3,6 +3,7 @@ import {
   LanguageContext,
   LanguageContextType,
 } from "./contexts/languageContext";
+import { useAuth } from "./contexts/authContext";
 import { translations, Language } from "./lib/translations";
 import {
   Episode,
@@ -15,6 +16,7 @@ import {
   ArcPoint,
   CustomStyle,
   Author,
+  CreativeProfile,
 } from "./types";
 import {
   saveProject,
@@ -37,6 +39,7 @@ import { NarrativeArcEditor } from "./components/NarrativeArcEditor";
 import { VideoGenerator } from "./components/VideoGenerator";
 import { Utilities } from "./components/Utilities";
 import { ProjectAuthors } from "./components/ProjectAuthors";
+import { CreativeProfileManager } from "./components/CreativeProfileManager";
 import { EpisodeList } from "./components/EpisodeList";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { PDFExportModal } from "./components/PDFExportModal";
@@ -67,6 +70,7 @@ import {
   CheckCircleIcon,
   SettingsIcon,
   GalleryIcon,
+  CameraIcon,
 } from "./components/icons";
 import {
   ensureStoryConsistency,
@@ -82,6 +86,7 @@ const generateId = () => Date.now() + Math.random();
 export const App: React.FC = () => {
   // Language State
   const [language, setLanguage] = useState<Language>("en");
+  const { user } = useAuth();
 
   const t = useCallback(
     (
@@ -125,6 +130,8 @@ export const App: React.FC = () => {
   const [references, setReferences] = useState<Reference[]>([]);
   const [narrativeArc, setNarrativeArc] = useState<ArcPoint[]>([]);
   const [authors, setAuthors] = useState<Author[]>([]);
+  const [creativeProfiles, setCreativeProfiles] = useState<CreativeProfile[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string | undefined>(undefined);
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -254,6 +261,8 @@ export const App: React.FC = () => {
     references,
     narrativeArc,
     authors,
+    creativeProfiles,
+    activeProfileId,
     episodes,
     characters,
   });
@@ -271,6 +280,8 @@ export const App: React.FC = () => {
     setReferences(state.references || []);
     setNarrativeArc(state.narrativeArc || []);
     setAuthors(state.authors || []);
+    setCreativeProfiles(state.creativeProfiles || []);
+    setActiveProfileId(state.activeProfileId);
     setEpisodes(state.episodes || []);
     setCharacters(state.characters || []);
 
@@ -519,6 +530,7 @@ export const App: React.FC = () => {
     { id: "video", icon: VideoIcon, label: t("videoGeneratorTab") },
     { id: "utilities", icon: ChartBarIcon, label: t("utilitiesTitle") },
     { id: "authors", icon: UsersIcon, label: t("authorsTitle") },
+    { id: "creativeTeam", icon: CameraIcon, label: t("creativeTeam") },
   ];
 
   return (
@@ -823,7 +835,10 @@ export const App: React.FC = () => {
                 <StoryGenerator
                   key={resetKey}
                   storyboardStyle={storyboardStyle}
+                  setStoryboardStyle={setStoryboardStyle}
                   aspectRatio={aspectRatio}
+                  setAspectRatio={setAspectRatio}
+                  activeProfile={creativeProfiles.find(p => p.id === activeProfileId)}
                   onStoryGenerated={async (preview) => {
                     applyState({
                       ...gatherState(),
@@ -1128,6 +1143,23 @@ export const App: React.FC = () => {
 
               {workflowPhase === "video" && <VideoGenerator />}
 
+              {workflowPhase === "authors" && (
+                <ProjectAuthors
+                  authors={authors}
+                  setAuthors={setAuthors}
+                  currentUser={user?.email || "Current User"}
+                />
+              )}
+
+              {workflowPhase === "creativeTeam" && (
+                <CreativeProfileManager
+                  profiles={creativeProfiles}
+                  onUpdateProfiles={setCreativeProfiles}
+                  activeProfileId={activeProfileId}
+                  onSetActiveProfile={setActiveProfileId}
+                />
+              )}
+
               {workflowPhase === "utilities" && (
                 <Utilities
                   key={resetKey}
@@ -1154,6 +1186,15 @@ export const App: React.FC = () => {
                   key={resetKey}
                   authors={authors}
                   setAuthors={setAuthors}
+                />
+              )}
+
+              {workflowPhase === "creative-team" && (
+                <CreativeProfileManager
+                  profiles={creativeProfiles}
+                  activeProfileId={activeProfileId}
+                  onUpdateProfiles={setCreativeProfiles}
+                  onSetActiveProfile={setActiveProfileId}
                 />
               )}
             </div>
@@ -1288,7 +1329,8 @@ export const App: React.FC = () => {
                   const result = await modifyStory(
                     gatherState(),
                     settings,
-                    language
+                    language,
+                    creativeProfiles.find(p => p.id === activeProfileId)
                   );
                   setModificationPreviewData({
                     explanation: result.explanation,

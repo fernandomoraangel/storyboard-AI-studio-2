@@ -1,5 +1,5 @@
 import { Chat, Part, Type, FunctionDeclaration } from "@google/genai"; // Keep types
-import type { Character, Scene, Reference, Shot, StoryboardStyle, ArcPoint, ProjectState } from '../types';
+import type { Character, Scene, Reference, Shot, StoryboardStyle, ArcPoint, ProjectState, CreativeProfile } from '../types';
 import type { Language } from "../lib/translations";
 import { translations } from "../lib/translations";
 import { ModificationSettings } from "../components/ModificationModal";
@@ -59,6 +59,15 @@ const incrementDailyImageCount = () => {
 };
 
 // Removed generateContentWithRetry as it is now handled by the provider
+
+const getPersonaInstruction = (profile?: CreativeProfile): string => {
+    if (!profile) return '';
+    return `\n\nIMPORTANT: You are acting as ${profile.name}, a ${profile.role}.
+    Personality: ${profile.personality}
+    Background: ${profile.background}
+    Mood: ${profile.mood}
+    Adopt this persona's voice, style, and creative biases in all your responses.`;
+};
 
 export const getChatTools = (language: Language): FunctionDeclaration[] => {
     const options = translations[language].options;
@@ -146,13 +155,16 @@ export const getChatTools = (language: Language): FunctionDeclaration[] => {
     ];
 };
 
-export const createChat = async (characters: Character[] = [], scenes: Scene[] = [], language: Language): Promise<Chat> => {
+export const createChat = async (characters: Character[] = [], scenes: Scene[] = [], language: Language, activeProfile?: CreativeProfile): Promise<Chat> => {
     const langInstruction = language === 'es' ? "Responde en español." : "Respond in English.";
 
     let characterDescriptions = characters.map(c => `- ${c.name} (${c.role})`).join('\n');
     let sceneDescriptions = scenes.map(s => `- ${s.title}`).join('\n');
 
+    const personaInstruction = getPersonaInstruction(activeProfile);
+
     const systemInstruction = `You are a powerful storyboard assistant for a Series production.
+${personaInstruction}
 - Goal: Help the user create/edit scenes for the *current* episode and manage characters.
 - Use 'create_scene' to add scenes to the current episode.
 - Use 'update_scene_details' to modify technical details.
@@ -360,13 +372,16 @@ export const generateStory = async (
     setProgress: (messageKey: string, data?: { [key: string]: string | number }) => void,
     executionPlan?: string[],
     structureSubElements?: string[],
-    structureCustomInput?: string
+    structureCustomInput?: string,
+    activeProfile?: CreativeProfile
 ): Promise<{ title: string; logline: string; soundtrackPrompt: string; treatment: string; structuralAnalysis: string; references: Reference[]; characters: Omit<Character, 'id' | 'images'>[]; episodes: { title: string, synopsis: string, scenes: Omit<Scene, 'id'>[] }[]; subplots: string; narrativeArc: ArcPoint[] }> => {
     const langInstruction = language === 'es' ? 'en español' : 'in English';
     const userPrompt = prompt.trim() === '' ? (language === 'es' ? 'una serie sorprendente y visualmente interesante' : 'a surprising and visually interesting series') : prompt;
     const hasSubplots = typeof subplotCount === 'number' && subplotCount > 0;
     const numCharacters = (typeof characterCount === 'number' && characterCount >= 0) ? characterCount : Math.floor(Math.random() * 3) + 1;
     const structureName = translations[language].options.narrativeStructureOptions[narrativeStructure] || narrativeStructure;
+
+    const personaInstruction = getPersonaInstruction(activeProfile);
 
     let structureInstruction = `Narrative Structure: ${structureName}.`;
     if (structureSubElements && structureSubElements.length > 0) {
@@ -393,7 +408,7 @@ export const generateStory = async (
     const stepExecutors: { [key: string]: () => Promise<void> } = {
         'progressGeneratingCore': async () => {
             context.coreConcept = await AIProviderFactory.getInstance().text.generateJSON(
-                `Create a concept for a ${episodeCount > 1 ? 'Series' : 'Story'} based on: "${userPrompt}". ${structureInstruction} Task: Invent a unique title, a compelling one-sentence logline, and a brief treatment (narrative summary) that reflects this structure. Response in ${langInstruction}.`,
+                `Create a concept for a ${episodeCount > 1 ? 'Series' : 'Story'} based on: "${userPrompt}". ${structureInstruction} ${personaInstruction} Task: Invent a unique title, a compelling one-sentence logline, and a brief treatment (narrative summary) that reflects this structure. Response in ${langInstruction}.`,
                 { type: Type.OBJECT, properties: { title: { type: Type.STRING }, logline: { type: Type.STRING }, treatment: { type: Type.STRING } }, required: ['title', 'logline', 'treatment'] }
             );
             context.refinedOutline = { logline: context.coreConcept.logline, treatment: context.coreConcept.treatment, references: [] };
@@ -731,8 +746,9 @@ export const ensureStoryConsistency = async (currentState: ProjectState, languag
     };
 };
 
-export const modifyStory = async (currentState: ProjectState, settings: ModificationSettings, language: Language): Promise<{ state: ProjectState; explanation: string }> => {
+export const modifyStory = async (currentState: ProjectState, settings: ModificationSettings, language: Language, activeProfile?: CreativeProfile): Promise<{ state: ProjectState; explanation: string }> => {
     const langInstruction = language === 'es' ? 'en español' : 'in English';
+    const personaInstruction = getPersonaInstruction(activeProfile);
 
     const scopeList = Object.entries(settings.scope)
         .filter(([k, v]) => v)
@@ -740,7 +756,7 @@ export const modifyStory = async (currentState: ProjectState, settings: Modifica
         .join(', ');
 
     const prompt = `
-    You are a creative story editor and co-writer. The user wants to MODIFY their story.
+    You are a creative story editor and co-writer. ${personaInstruction} The user wants to MODIFY their story.
     
     CURRENT STORY STATE:
     Title: ${currentState.seriesTitle}

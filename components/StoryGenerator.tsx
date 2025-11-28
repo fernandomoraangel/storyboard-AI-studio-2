@@ -6,6 +6,7 @@ import type {
   ArcPoint,
   Episode,
   StoryboardStyle,
+  CreativeProfile,
 } from "../types";
 import { generateStory, generateQuickText } from "../services/geminiService";
 import { WandIcon, GripVerticalIcon } from "./icons";
@@ -41,13 +42,19 @@ interface GenerationStepConfig {
 interface StoryGeneratorProps {
   onStoryGenerated: (story: StoryPreview) => Promise<void>;
   storyboardStyle: StoryboardStyle;
+  setStoryboardStyle: (style: StoryboardStyle) => void;
   aspectRatio: string;
+  setAspectRatio: (ratio: string) => void;
+  activeProfile?: CreativeProfile;
 }
 
 export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
   onStoryGenerated,
   storyboardStyle,
+  setStoryboardStyle,
   aspectRatio,
+  setAspectRatio,
+  activeProfile,
 }) => {
   const { t, language, options } = useLanguage();
   const [prompt, setPrompt] = useState("");
@@ -141,13 +148,11 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
     try {
       let promptText = "";
       if (prompt.trim()) {
-        promptText = `Create a Lajos Egri style premise (Character + Conflict = Conclusion) based on this story idea: "${prompt}". Keep it concise, one sentence. Response in ${
-          language === "es" ? "Spanish" : "English"
-        }.`;
+        promptText = `Create a Lajos Egri style premise (Character + Conflict = Conclusion) based on this story idea: "${prompt}". Keep it concise, one sentence. Response in ${language === "es" ? "Spanish" : "English"
+          }.`;
       } else {
-        promptText = `Create a random, compelling Lajos Egri style premise (Character + Conflict = Conclusion) for a new story. Keep it concise, one sentence. Response in ${
-          language === "es" ? "Spanish" : "English"
-        }.`;
+        promptText = `Create a random, compelling Lajos Egri style premise (Character + Conflict = Conclusion) for a new story. Keep it concise, one sentence. Response in ${language === "es" ? "Spanish" : "English"
+          }.`;
       }
 
       const premise = await generateQuickText(promptText, language);
@@ -414,7 +419,8 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
         setProgress,
         finalPlan,
         selectedSubElements, // Pass selected sub-elements (arrays)
-        structureCustomInput // Pass custom input (string) for Egri/others
+        structureCustomInput, // Pass custom input (string) for Egri/others
+        activeProfile
       );
       setPreview(result);
       setShowProgressModal(false);
@@ -488,7 +494,7 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
   // Check if current structure has sub-options
   const currentSubOptions =
     options.structureSubOptions &&
-    options.structureSubOptions[narrativeStructure]
+      options.structureSubOptions[narrativeStructure]
       ? options.structureSubOptions[narrativeStructure]
       : null;
 
@@ -531,9 +537,8 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
                     className="w-4 h-4 rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
                   />
                   <span
-                    className={`flex-1 text-sm ${
-                      step.enabled ? "text-white" : "text-gray-500"
-                    }`}
+                    className={`flex-1 text-sm ${step.enabled ? "text-white" : "text-gray-500"
+                      }`}
                   >
                     {t(step.key as any).replace("...", "")}
                   </span>
@@ -820,11 +825,10 @@ export const StoryGenerator: React.FC<StoryGeneratorProps> = ({
                     <button
                       key={option}
                       onClick={() => toggleSubElement(option)}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors text-left ${
-                        selectedSubElements.includes(option)
-                          ? "bg-indigo-600 border-indigo-500 text-white"
-                          : "bg-gray-700/50 border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500"
-                      }`}
+                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors text-left ${selectedSubElements.includes(option)
+                        ? "bg-indigo-600 border-indigo-500 text-white"
+                        : "bg-gray-700/50 border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                        }`}
                     >
                       {option}
                     </button>

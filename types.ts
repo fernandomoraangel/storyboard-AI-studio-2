@@ -64,29 +64,29 @@ export interface Character {
 export interface Reference {
   title: string;
   uri: string;
-  description:string;
+  description: string;
   details?: string;
 }
 
 export type StoryboardStyle = 'Cinematic' | 'Sketch' | 'ComicBook' | 'Anime' | 'FilmNoir' | 'LineDrawing' | 'QuickLineDrawing' | 'LowPoly' | 'StylizedVideoGame' | 'Solarpunk' | 'Cyberpunk' | 'Sepia' | 'Custom';
 
 export interface ArcPoint {
-    id: number;
-    label: string; // "Episode 1", "Scene 1", etc.
-    x?: number; // Horizontal position 0-100
-    tension: number; // 0-10
-    emotion: number; // 0-10
-    conflict: number; // 0-10
-    modifiedCurves?: ('tension' | 'emotion' | 'conflict')[]; // Tracks which curves have active nodes at this point
-    isEpisodeAnchor?: boolean; // True if this point represents a fixed episode/structural anchor
+  id: number;
+  label: string; // "Episode 1", "Scene 1", etc.
+  x?: number; // Horizontal position 0-100
+  tension: number; // 0-10
+  emotion: number; // 0-10
+  conflict: number; // 0-10
+  modifiedCurves?: ('tension' | 'emotion' | 'conflict')[]; // Tracks which curves have active nodes at this point
+  isEpisodeAnchor?: boolean; // True if this point represents a fixed episode/structural anchor
 }
 
 export interface Author {
-    id: number;
-    name: string;
-    role: string;
-    participation: number; // 0-100
-    email: string;
+  id: number;
+  name: string;
+  role: string;
+  participation: number; // 0-100
+  email: string;
 }
 
 export interface ProjectState {
@@ -94,7 +94,7 @@ export interface ProjectState {
   authorName: string;
   storyboardStyle: StoryboardStyle;
   aspectRatio: string;
-  
+
   // Series Bible Data
   logline: string;
   structuralAnalysis: string; // Series Arc
@@ -102,12 +102,25 @@ export interface ProjectState {
   subplots: string;
   soundtrackPrompt: string;
   references: Reference[];
-  narrativeArc: ArcPoint[]; 
-  authors: Author[]; // New field
-  
+  narrativeArc: ArcPoint[];
+  authors: Author[];
+  creativeProfiles: CreativeProfile[]; // New field
+  activeProfileId?: string; // New field
+
   // Content
   episodes: Episode[];
   characters: Character[];
+}
+
+export interface CreativeProfile {
+  id: string;
+  name: string;
+  role: string;
+  personality: string;
+  references: string[];
+  background: string;
+  mood: string;
+  imageUrl: string | null;
 }
 
 export interface ProjectMeta {

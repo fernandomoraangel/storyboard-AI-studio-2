@@ -57,6 +57,7 @@ export const translations = {
     videoGeneratorTab: "Video Generator",
     utilitiesTitle: "Utilities",
     authorsTitle: "Project Authors",
+    creativeTeam: "Creative Team",
 
     // Authors
     addAuthor: "Add Author",
@@ -837,6 +838,7 @@ export const translations = {
     videoGeneratorTab: "Generador de Video",
     utilitiesTitle: "Utilidades",
     authorsTitle: "Autores del Proyecto",
+    creativeTeam: "Equipo Creativo",
 
     // Authors
     addAuthor: "Agregar Autor",

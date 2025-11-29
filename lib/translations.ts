@@ -638,6 +638,8 @@ export const translations = {
         immersiveExperience: "Immersive Experience",
         arExperience: "AR Experience",
         podcast: "Podcast",
+        theater: "Theater",
+        musical: "Musical",
       },
       aspectRatioOptions: {
         "16:9": "16:9 (Widescreen)",
@@ -1446,6 +1448,8 @@ export const translations = {
         immersiveExperience: "Experiencia inmersiva",
         arExperience: "Experiencia RA",
         podcast: "Podcast",
+        theater: "Teatro",
+        musical: "Musical",
       },
       aspectRatioOptions: {
         "16:9": "16:9 (Panorámico)",

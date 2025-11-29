@@ -33,6 +33,7 @@ import {
 import { Home } from "./components/Home";
 import { Storyboard } from "./components/Storyboard";
 import { GalleryView } from "./components/GalleryView";
+import { GridGallery } from "./components/GridGallery";
 import { SeriesBible } from "./components/SeriesBible";
 import { StoryGenerator } from "./components/StoryGenerator";
 import { VisualOrganizer } from "./components/VisualOrganizer";
@@ -529,6 +530,7 @@ export const App: React.FC = () => {
     { id: "episodes", icon: FolderOpenIcon, label: t("episodes") },
     { id: "organizer", icon: LayoutGridIcon, label: t("visualOrganizerTitle") },
     { id: "storyboard", icon: FilmIcon, label: t("storyBoardTab") },
+    { id: "grid_gallery", icon: LayoutGridIcon, label: "Grid Gallery" },
     { id: "gallery", icon: GalleryIcon, label: t("galleryView") },
     { id: "video", icon: VideoIcon, label: t("videoGeneratorTab") },
     { id: "utilities", icon: ChartBarIcon, label: t("utilitiesTitle") },
@@ -897,6 +899,7 @@ export const App: React.FC = () => {
                                   notes: "",
                                   imageUrl: null,
                                   videoUrl: null,
+                                  subplot: "",
                                 },
                               ],
                         })),
@@ -964,6 +967,13 @@ export const App: React.FC = () => {
                   scenes={episodes.flatMap(e => e.scenes)}
                   characters={characters}
                   onClose={() => setWorkflowPhase("storyboard")}
+                />
+              )}
+
+              {workflowPhase === "grid_gallery" && (
+                <GridGallery
+                  episodes={episodes}
+                  characters={characters}
                 />
               )}
 
@@ -1048,6 +1058,7 @@ export const App: React.FC = () => {
                                         duration: 2,
                                         soundFx: "",
                                         notes: "",
+                                        subplot: "",
                                       },
                                     ],
                                   }

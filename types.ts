@@ -19,6 +19,7 @@ export interface Shot {
   duration: number;
   soundFx: string;
   notes: string;
+  subplot?: string;
 }
 
 export interface Scene {

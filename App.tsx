@@ -34,6 +34,7 @@ import { Home } from "./components/Home";
 import { Storyboard } from "./components/Storyboard";
 import { GalleryView } from "./components/GalleryView";
 import { GridGallery } from "./components/GridGallery";
+import { AdvancedNarrativeArc } from "./components/AdvancedNarrativeArc";
 import { SeriesBible } from "./components/SeriesBible";
 import { StoryGenerator } from "./components/StoryGenerator";
 import { VisualOrganizer } from "./components/VisualOrganizer";
@@ -527,6 +528,7 @@ export const App: React.FC = () => {
       label: t("storyBoardTab") + " / " + t("outlineTab"),
     },
     { id: "arc", icon: ActivityIcon, label: t("narrativeArcTitle") },
+    { id: "advanced_arc", icon: ActivityIcon, label: "Advanced Arc" },
     { id: "episodes", icon: FolderOpenIcon, label: t("episodes") },
     { id: "organizer", icon: LayoutGridIcon, label: t("visualOrganizerTitle") },
     { id: "storyboard", icon: FilmIcon, label: t("storyBoardTab") },
@@ -897,8 +899,6 @@ export const App: React.FC = () => {
                                   duration: 5,
                                   soundFx: "",
                                   notes: "",
-                                  imageUrl: null,
-                                  videoUrl: null,
                                   subplot: "",
                                 },
                               ],
@@ -974,6 +974,33 @@ export const App: React.FC = () => {
                 <GridGallery
                   episodes={episodes}
                   characters={characters}
+                />
+              )}
+
+              {workflowPhase === "advanced_arc" && (
+                <AdvancedNarrativeArc
+                  projectState={{
+                    seriesTitle,
+                    authorName,
+                    storyboardStyle,
+                    aspectRatio,
+                    logline,
+                    structuralAnalysis,
+                    treatment,
+                    subplots,
+                    soundtrackPrompt,
+                    references,
+                    narrativeArc,
+                    authors,
+                    creativeProfiles,
+                    activeProfileId,
+                    episodes,
+                    characters
+                  }}
+                  onUpdate={(newState) => {
+                    if (newState.episodes) setEpisodes(newState.episodes);
+                    if (newState.narrativeArc) setNarrativeArc(newState.narrativeArc);
+                  }}
                 />
               )}
 

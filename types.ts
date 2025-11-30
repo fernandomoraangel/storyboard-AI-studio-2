@@ -37,6 +37,7 @@ export interface Scene {
   actions: string;
   tone: string;
   notes: string;
+  narrativeArc?: ArcPoint[];
 }
 
 export interface Episode {
@@ -44,6 +45,7 @@ export interface Episode {
   title: string;
   synopsis: string;
   scenes: Scene[];
+  narrativeArc?: ArcPoint[];
 }
 
 export interface ChatMessage {

@@ -134,8 +134,12 @@ export const App: React.FC = () => {
   const [references, setReferences] = useState<Reference[]>([]);
   const [narrativeArc, setNarrativeArc] = useState<ArcPoint[]>([]);
   const [authors, setAuthors] = useState<Author[]>([]);
-  const [creativeProfiles, setCreativeProfiles] = useState<CreativeProfile[]>([]);
-  const [activeProfileId, setActiveProfileId] = useState<string | undefined>(undefined);
+  const [creativeProfiles, setCreativeProfiles] = useState<CreativeProfile[]>(
+    []
+  );
+  const [activeProfileId, setActiveProfileId] = useState<string | undefined>(
+    undefined
+  );
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -175,20 +179,24 @@ export const App: React.FC = () => {
     isOpen: boolean;
     title: string;
     message: string;
-    type: 'success' | 'error' | 'info';
+    type: "success" | "error" | "info";
   }>({
     isOpen: false,
-    title: '',
-    message: '',
-    type: 'info',
+    title: "",
+    message: "",
+    type: "info",
   });
 
-  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showAlert = (
+    title: string,
+    message: string,
+    type: "success" | "error" | "info" = "info"
+  ) => {
     setAlertState({ isOpen: true, title, message, type });
   };
 
   const closeAlert = () => {
-    setAlertState(prev => ({ ...prev, isOpen: false }));
+    setAlertState((prev) => ({ ...prev, isOpen: false }));
   };
 
   // Mass Generation State
@@ -323,7 +331,11 @@ export const App: React.FC = () => {
       showAlert(t("projectSaved"), "", "success");
     } catch (e) {
       console.error("Failed to save project:", e);
-      showAlert("Error", t("errorGeneric", { message: "Failed to save project." }), "error");
+      showAlert(
+        "Error",
+        t("errorGeneric", { message: "Failed to save project." }),
+        "error"
+      );
     }
   };
 
@@ -339,7 +351,11 @@ export const App: React.FC = () => {
       }
     } catch (e) {
       console.error("Failed to load project:", e);
-      showAlert("Error", t("errorGeneric", { message: "Failed to load project." }), "error");
+      showAlert(
+        "Error",
+        t("errorGeneric", { message: "Failed to load project." }),
+        "error"
+      );
     }
   };
 
@@ -376,7 +392,11 @@ export const App: React.FC = () => {
       setResetKey((prev) => prev + 1);
     } catch (e) {
       console.error("Error creating new project:", e);
-      showAlert("Error", t("errorGeneric", { message: "Failed to reset project." }), "error");
+      showAlert(
+        "Error",
+        t("errorGeneric", { message: "Failed to reset project." }),
+        "error"
+      );
     }
   };
 
@@ -480,18 +500,18 @@ export const App: React.FC = () => {
                 prevEps.map((e) =>
                   e.id === ep.id
                     ? {
-                      ...e,
-                      scenes: e.scenes.map((s) =>
-                        s.id === scene.id
-                          ? {
-                            ...s,
-                            shots: s.shots.map((sh) =>
-                              sh.id === shot.id ? { ...sh, imageUrl } : sh
-                            ),
-                          }
-                          : s
-                      ),
-                    }
+                        ...e,
+                        scenes: e.scenes.map((s) =>
+                          s.id === scene.id
+                            ? {
+                                ...s,
+                                shots: s.shots.map((sh) =>
+                                  sh.id === shot.id ? { ...sh, imageUrl } : sh
+                                ),
+                              }
+                            : s
+                        ),
+                      }
                     : e
                 )
               );
@@ -545,8 +565,9 @@ export const App: React.FC = () => {
       <div className="flex h-screen bg-gray-900 text-white font-sans overflow-hidden">
         {/* SIDEBAR */}
         <aside
-          className={`${isSidebarCollapsed ? "w-20" : "w-64"
-            } bg-gray-800 border-r border-gray-700 flex flex-col flex-shrink-0 transition-all duration-300 z-30 relative`}
+          className={`${
+            isSidebarCollapsed ? "w-20" : "w-64"
+          } bg-gray-800 border-r border-gray-700 flex flex-col flex-shrink-0 transition-all duration-300 z-30 relative`}
         >
           {/* Header / Toggle */}
           <div className="h-16 flex items-center px-4 border-b border-gray-700 justify-between flex-shrink-0">
@@ -557,8 +578,9 @@ export const App: React.FC = () => {
             )}
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className={`p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-white ${isSidebarCollapsed ? "mx-auto" : ""
-                }`}
+              className={`p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-white ${
+                isSidebarCollapsed ? "mx-auto" : ""
+              }`}
             >
               {isSidebarCollapsed ? (
                 <ChevronRightIcon className="w-5 h-5" />
@@ -575,18 +597,21 @@ export const App: React.FC = () => {
                 <button
                   key={item.id}
                   onClick={() => setWorkflowPhase(item.id)}
-                  className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-3"
-                    } py-2.5 rounded-md text-sm font-medium transition-colors group relative ${workflowPhase === item.id
+                  className={`w-full flex items-center ${
+                    isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                  } py-2.5 rounded-md text-sm font-medium transition-colors group relative ${
+                    workflowPhase === item.id
                       ? "bg-indigo-600 text-white shadow-md"
                       : "text-gray-400 hover:text-white hover:bg-gray-700"
-                    }`}
+                  }`}
                   title={isSidebarCollapsed ? item.label : undefined}
                 >
                   <item.icon
-                    className={`w-5 h-5 ${!isSidebarCollapsed ? "mr-3" : ""} ${workflowPhase === item.id
-                      ? "text-white"
-                      : "text-gray-500 group-hover:text-gray-300"
-                      }`}
+                    className={`w-5 h-5 ${!isSidebarCollapsed ? "mr-3" : ""} ${
+                      workflowPhase === item.id
+                        ? "text-white"
+                        : "text-gray-500 group-hover:text-gray-300"
+                    }`}
                   />
                   {!isSidebarCollapsed && (
                     <span className="truncate">{item.label}</span>
@@ -607,8 +632,9 @@ export const App: React.FC = () => {
 
               <button
                 onClick={handleNewProjectClick}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-3"
-                  } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors`}
+                className={`w-full flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors`}
                 title={t("newProject")}
               >
                 <PlusIcon
@@ -619,8 +645,9 @@ export const App: React.FC = () => {
 
               <button
                 onClick={handleSaveProjectClick}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-3"
-                  } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`}
+                className={`w-full flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`}
                 title={t("saveProject")}
               >
                 <FloppyDiskIcon
@@ -634,8 +661,9 @@ export const App: React.FC = () => {
                   loadProjectsList();
                   setShowLoadProjectModal(true);
                 }}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-3"
-                  } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`}
+                className={`w-full flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`}
                 title={t("loadProject")}
               >
                 <FolderOpenIcon
@@ -646,8 +674,9 @@ export const App: React.FC = () => {
 
               <button
                 onClick={() => setShowModificationModal(true)}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-3"
-                  } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-purple-400 hover:bg-gray-700 transition-colors`}
+                className={`w-full flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-purple-400 hover:bg-gray-700 transition-colors`}
                 title={t("modifyStory")}
               >
                 <WandIcon
@@ -658,8 +687,9 @@ export const App: React.FC = () => {
 
               <button
                 onClick={() => setShowConsistencyModal(true)}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-3"
-                  } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-yellow-400 hover:bg-gray-700 transition-colors`}
+                className={`w-full flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-yellow-400 hover:bg-gray-700 transition-colors`}
                 title={t("checkConsistency")}
               >
                 <CheckCircleIcon
@@ -670,8 +700,9 @@ export const App: React.FC = () => {
 
               <button
                 onClick={() => setShowSettingsModal(true)}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-3"
-                  } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`}
+                className={`w-full flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                } py-2 rounded-md text-sm font-medium text-gray-400 hover:text-indigo-400 hover:bg-gray-700 transition-colors`}
                 title={t("settingsTitle")}
               >
                 <SettingsIcon
@@ -774,7 +805,11 @@ export const App: React.FC = () => {
           <main className="flex-1 overflow-y-auto p-6 scroll-smooth bg-gray-900 relative">
             <div className="max-w-7xl mx-auto">
               {workflowPhase === "home" && (
-                <Home setWorkflowPhase={setWorkflowPhase} />
+                <Home
+                  setWorkflowPhase={setWorkflowPhase}
+                  onOpenModificationModal={() => setShowModificationModal(true)}
+                  onOpenConsistencyModal={() => setShowConsistencyModal(true)}
+                />
               )}
               {workflowPhase === "bible" && (
                 <SeriesBible
@@ -848,7 +883,9 @@ export const App: React.FC = () => {
                   setStoryboardStyle={setStoryboardStyle}
                   aspectRatio={aspectRatio}
                   setAspectRatio={setAspectRatio}
-                  activeProfile={creativeProfiles.find(p => p.id === activeProfileId)}
+                  activeProfile={creativeProfiles.find(
+                    (p) => p.id === activeProfileId
+                  )}
                   onStoryGenerated={async (preview) => {
                     applyState({
                       ...gatherState(),
@@ -875,33 +912,33 @@ export const App: React.FC = () => {
                           shots:
                             s.shots && s.shots.length > 0
                               ? s.shots.map((shot, k) => ({
-                                ...shot,
-                                id: generateId() + k,
-                                imageUrl: shot.imageUrl || null,
-                                videoUrl: shot.videoUrl || null,
-                              }))
+                                  ...shot,
+                                  id: generateId() + k,
+                                  imageUrl: shot.imageUrl || null,
+                                  videoUrl: shot.videoUrl || null,
+                                }))
                               : [
-                                {
-                                  id: generateId(),
-                                  description: s.actions || "Scene action",
-                                  shotType: "Wide Shot (WS)",
-                                  cameraMovement: "Static",
-                                  cameraType: "Digital Cinema Camera",
-                                  lensType: "Standard (35mm-50mm)",
-                                  lensBlur: "None",
-                                  atmosphere: "Neutral",
-                                  lighting: "Natural Light",
-                                  style: "Cinematic",
-                                  technicalNotes: "",
-                                  colorGrade: "Neutral",
-                                  filmGrain: "None",
-                                  filmStock: "Digital",
-                                  duration: 5,
-                                  soundFx: "",
-                                  notes: "",
-                                  subplot: "",
-                                },
-                              ],
+                                  {
+                                    id: generateId(),
+                                    description: s.actions || "Scene action",
+                                    shotType: "Wide Shot (WS)",
+                                    cameraMovement: "Static",
+                                    cameraType: "Digital Cinema Camera",
+                                    lensType: "Standard (35mm-50mm)",
+                                    lensBlur: "None",
+                                    atmosphere: "Neutral",
+                                    lighting: "Natural Light",
+                                    style: "Cinematic",
+                                    technicalNotes: "",
+                                    colorGrade: "Neutral",
+                                    filmGrain: "None",
+                                    filmStock: "Digital",
+                                    duration: 5,
+                                    soundFx: "",
+                                    notes: "",
+                                    subplot: "",
+                                  },
+                                ],
                         })),
                       })),
                     });
@@ -952,8 +989,8 @@ export const App: React.FC = () => {
                     if (
                       window.confirm(
                         t("updateStoryOrder") +
-                        "? " +
-                        t("consistencyModalDescription")
+                          "? " +
+                          t("consistencyModalDescription")
                       )
                     ) {
                       setShowConsistencyModal(true);
@@ -964,17 +1001,14 @@ export const App: React.FC = () => {
 
               {workflowPhase === "gallery" && (
                 <GalleryView
-                  scenes={episodes.flatMap(e => e.scenes)}
+                  scenes={episodes.flatMap((e) => e.scenes)}
                   characters={characters}
                   onClose={() => setWorkflowPhase("storyboard")}
                 />
               )}
 
               {workflowPhase === "grid_gallery" && (
-                <GridGallery
-                  episodes={episodes}
-                  characters={characters}
-                />
+                <GridGallery episodes={episodes} characters={characters} />
               )}
 
               {workflowPhase === "advanced_arc" && (
@@ -995,11 +1029,12 @@ export const App: React.FC = () => {
                     creativeProfiles,
                     activeProfileId,
                     episodes,
-                    characters
+                    characters,
                   }}
                   onUpdate={(newState) => {
                     if (newState.episodes) setEpisodes(newState.episodes);
-                    if (newState.narrativeArc) setNarrativeArc(newState.narrativeArc);
+                    if (newState.narrativeArc)
+                      setNarrativeArc(newState.narrativeArc);
                   }}
                 />
               )}
@@ -1032,11 +1067,11 @@ export const App: React.FC = () => {
                         prev.map((ep) =>
                           ep.id === activeEpisode.id
                             ? {
-                              ...ep,
-                              scenes: ep.scenes.map((s) =>
-                                s.id === id ? { ...s, ...details } : s
-                              ),
-                            }
+                                ...ep,
+                                scenes: ep.scenes.map((s) =>
+                                  s.id === id ? { ...s, ...details } : s
+                                ),
+                              }
                             : ep
                         )
                       );
@@ -1046,9 +1081,9 @@ export const App: React.FC = () => {
                         prev.map((ep) =>
                           ep.id === activeEpisode.id
                             ? {
-                              ...ep,
-                              scenes: ep.scenes.filter((s) => s.id !== id),
-                            }
+                                ...ep,
+                                scenes: ep.scenes.filter((s) => s.id !== id),
+                              }
                             : ep
                         )
                       );
@@ -1058,40 +1093,40 @@ export const App: React.FC = () => {
                         prev.map((ep) =>
                           ep.id === activeEpisode.id
                             ? {
-                              ...ep,
-                              scenes: ep.scenes.map((s) =>
-                                s.id === sceneId
-                                  ? {
-                                    ...s,
-                                    shots: [
-                                      ...s.shots,
-                                      {
-                                        id: generateId(),
-                                        description: "",
-                                        imageUrl: null,
-                                        videoUrl: null,
-                                        shotType: "Medium Shot (MS)",
-                                        cameraMovement: "Static",
-                                        cameraType: "Digital Cinema Camera",
-                                        lensType: "Standard",
-                                        lensBlur: "None",
-                                        atmosphere: "Neutral",
-                                        lighting: "Natural Light",
-                                        style: "Cinematic",
-                                        technicalNotes: "",
-                                        colorGrade: "Neutral",
-                                        filmGrain: "None",
-                                        filmStock: "Digital",
-                                        duration: 2,
-                                        soundFx: "",
-                                        notes: "",
-                                        subplot: "",
-                                      },
-                                    ],
-                                  }
-                                  : s
-                              ),
-                            }
+                                ...ep,
+                                scenes: ep.scenes.map((s) =>
+                                  s.id === sceneId
+                                    ? {
+                                        ...s,
+                                        shots: [
+                                          ...s.shots,
+                                          {
+                                            id: generateId(),
+                                            description: "",
+                                            imageUrl: null,
+                                            videoUrl: null,
+                                            shotType: "Medium Shot (MS)",
+                                            cameraMovement: "Static",
+                                            cameraType: "Digital Cinema Camera",
+                                            lensType: "Standard",
+                                            lensBlur: "None",
+                                            atmosphere: "Neutral",
+                                            lighting: "Natural Light",
+                                            style: "Cinematic",
+                                            technicalNotes: "",
+                                            colorGrade: "Neutral",
+                                            filmGrain: "None",
+                                            filmStock: "Digital",
+                                            duration: 2,
+                                            soundFx: "",
+                                            notes: "",
+                                            subplot: "",
+                                          },
+                                        ],
+                                      }
+                                    : s
+                                ),
+                              }
                             : ep
                         )
                       );
@@ -1101,18 +1136,18 @@ export const App: React.FC = () => {
                         prev.map((ep) =>
                           ep.id === activeEpisode.id
                             ? {
-                              ...ep,
-                              scenes: ep.scenes.map((s) =>
-                                s.id === sceneId
-                                  ? {
-                                    ...s,
-                                    shots: s.shots.map((sh) =>
-                                      sh.id === shot.id ? shot : sh
-                                    ),
-                                  }
-                                  : s
-                              ),
-                            }
+                                ...ep,
+                                scenes: ep.scenes.map((s) =>
+                                  s.id === sceneId
+                                    ? {
+                                        ...s,
+                                        shots: s.shots.map((sh) =>
+                                          sh.id === shot.id ? shot : sh
+                                        ),
+                                      }
+                                    : s
+                                ),
+                              }
                             : ep
                         )
                       );
@@ -1122,18 +1157,18 @@ export const App: React.FC = () => {
                         prev.map((ep) =>
                           ep.id === activeEpisode.id
                             ? {
-                              ...ep,
-                              scenes: ep.scenes.map((s) =>
-                                s.id === sceneId
-                                  ? {
-                                    ...s,
-                                    shots: s.shots.filter(
-                                      (sh) => sh.id !== shotId
-                                    ),
-                                  }
-                                  : s
-                              ),
-                            }
+                                ...ep,
+                                scenes: ep.scenes.map((s) =>
+                                  s.id === sceneId
+                                    ? {
+                                        ...s,
+                                        shots: s.shots.filter(
+                                          (sh) => sh.id !== shotId
+                                        ),
+                                      }
+                                    : s
+                                ),
+                              }
                             : ep
                         )
                       );
@@ -1155,15 +1190,15 @@ export const App: React.FC = () => {
                         prev.map((ep) =>
                           ep.id === activeEpisode.id
                             ? {
-                              ...ep,
-                              scenes: ep.scenes.map((s) => {
-                                if (s.id !== sceneId) return s;
-                                const newShots = [...s.shots];
-                                const [removed] = newShots.splice(start, 1);
-                                newShots.splice(end, 0, removed);
-                                return { ...s, shots: newShots };
-                              }),
-                            }
+                                ...ep,
+                                scenes: ep.scenes.map((s) => {
+                                  if (s.id !== sceneId) return s;
+                                  const newShots = [...s.shots];
+                                  const [removed] = newShots.splice(start, 1);
+                                  newShots.splice(end, 0, removed);
+                                  return { ...s, shots: newShots };
+                                }),
+                              }
                             : ep
                         )
                       );
@@ -1304,10 +1339,11 @@ export const App: React.FC = () => {
                   )}
                   <button
                     onClick={() => confirmSaveProject(true)}
-                    className={`w-full px-4 py-3 ${currentProjectId
-                      ? "bg-gray-700 hover:bg-gray-600"
-                      : "bg-indigo-600 hover:bg-indigo-500"
-                      } text-white rounded-md text-sm font-bold transition-colors`}
+                    className={`w-full px-4 py-3 ${
+                      currentProjectId
+                        ? "bg-gray-700 hover:bg-gray-600"
+                        : "bg-indigo-600 hover:bg-indigo-500"
+                    } text-white rounded-md text-sm font-bold transition-colors`}
                   >
                     {t("saveAsNew")}
                   </button>
@@ -1374,7 +1410,7 @@ export const App: React.FC = () => {
                     gatherState(),
                     settings,
                     language,
-                    creativeProfiles.find(p => p.id === activeProfileId)
+                    creativeProfiles.find((p) => p.id === activeProfileId)
                   );
                   setModificationPreviewData({
                     explanation: result.explanation,
@@ -1555,16 +1591,15 @@ export const App: React.FC = () => {
                   <WandIcon className="w-4 h-4 text-indigo-400 animate-pulse" />
                   {t("generating")}
                 </h4>
-                <button
-                >
-                  {t("stopRegeneration")}
-                </button>
+                <button>{t("stopRegeneration")}</button>
               </div>
               <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
                 <div
                   className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
                   style={{
-                    width: `${(regenProgress.current / regenProgress.total) * 100}%`,
+                    width: `${
+                      (regenProgress.current / regenProgress.total) * 100
+                    }%`,
                   }}
                 ></div>
               </div>
@@ -1597,4 +1632,3 @@ export const App: React.FC = () => {
     </LanguageContext.Provider>
   );
 };
-

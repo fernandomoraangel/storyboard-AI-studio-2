@@ -57,16 +57,22 @@ export const translations = {
     visualization: "Visualization",
     production: "Production",
     tools: "Tools",
-    creativeTeamDesc: "Define the AI personas (Director, Cinematographer) that will guide the style of your project.",
+    creativeTeamDesc:
+      "Define the AI personas (Director, Cinematographer) that will guide the style of your project.",
     authorsDesc: "Manage the human authors and contributors of the project.",
-    storyGeneratorDesc: "Generate story ideas, plots, and scripts using AI assistance.",
-    narrativeArcDesc: "Visualize and adjust the emotional and dramatic tension of your story.",
-    seriesBibleDesc: "Define the core elements: Logline, Synopsis, Characters, and Tone.",
+    storyGeneratorDesc:
+      "Generate story ideas, plots, and scripts using AI assistance.",
+    narrativeArcDesc:
+      "Visualize and adjust the emotional and dramatic tension of your story.",
+    seriesBibleDesc:
+      "Define the core elements: Logline, Synopsis, Characters, and Tone.",
     episodesDesc: "Manage the list of episodes and their individual scenes.",
-    visualOrganizerDesc: "Reorder scenes and shots using a drag-and-drop interface.",
+    visualOrganizerDesc:
+      "Reorder scenes and shots using a drag-and-drop interface.",
     storyboardDesc: "View and edit the visual storyboard, shot by shot.",
     galleryViewDesc: "Browse all generated images in a gallery format.",
-    videoGeneratorDesc: "Turn your storyboard frames into video clips using AI.",
+    videoGeneratorDesc:
+      "Turn your storyboard frames into video clips using AI.",
     utilitiesDesc: "Export your project to PDF, Frame.io, or manage data.",
 
     // Tabs
@@ -75,12 +81,23 @@ export const translations = {
     storyBoardTab: "Storyboard",
     outlineTab: "Story Bible",
     narrativeArcTitle: "Narrative Arc",
+    advancedArcTitle: "Advanced Arc",
+    advancedArcDesc:
+      "Visualize complex narrative arcs with multiple tension layers and subplot tracking.",
     episodes: "Episodes",
     visualOrganizerTitle: "Visual Organizer",
+    gridGalleryTitle: "Grid Gallery",
+    gridGalleryDesc:
+      "View all shots and characters in a comprehensive grid layout.",
     videoGeneratorTab: "Video Generator",
     utilitiesTitle: "Utilities",
     authorsTitle: "Project Authors",
     creativeTeam: "Creative Team",
+    modifyStoryDesc:
+      "Use AI to modify existing story elements, add new scenes, or refine characters.",
+    checkConsistencyDesc:
+      "Automatically check and fix inconsistencies in your story elements.",
+    cocreate: "Co-Create",
 
     // Authors
     addAuthor: "Add Author",
@@ -871,16 +888,23 @@ export const translations = {
     visualization: "Visualización",
     production: "Producción",
     tools: "Herramientas",
-    creativeTeamDesc: "Define las personas de IA (Director, Cineasta) que guiarán el estilo de tu proyecto.",
+    creativeTeamDesc:
+      "Define las personas de IA (Director, Cineasta) que guiarán el estilo de tu proyecto.",
     authorsDesc: "Gestiona los autores humanos y colaboradores del proyecto.",
-    storyGeneratorDesc: "Genera ideas de historias, tramas y guiones con asistencia de IA.",
-    narrativeArcDesc: "Visualiza y ajusta la tensión emocional y dramática de tu historia.",
-    seriesBibleDesc: "Define los elementos centrales: Logline, Sinopsis, Personajes y Tono.",
+    storyGeneratorDesc:
+      "Genera ideas de historias, tramas y guiones con asistencia de IA.",
+    narrativeArcDesc:
+      "Visualiza y ajusta la tensión emocional y dramática de tu historia.",
+    seriesBibleDesc:
+      "Define los elementos centrales: Logline, Sinopsis, Personajes y Tono.",
     episodesDesc: "Gestiona la lista de episodios y sus escenas individuales.",
-    visualOrganizerDesc: "Reordena escenas y planos usando una interfaz de arrastrar y soltar.",
+    visualOrganizerDesc:
+      "Reordena escenas y planos usando una interfaz de arrastrar y soltar.",
     storyboardDesc: "Ver y editar el guion gráfico visual, plano por plano.",
-    galleryViewDesc: "Explora todas las imágenes generadas en formato de galería.",
-    videoGeneratorDesc: "Convierte tus cuadros del guion gráfico en clips de video usando IA.",
+    galleryViewDesc:
+      "Explora todas las imágenes generadas en formato de galería.",
+    videoGeneratorDesc:
+      "Convierte tus cuadros del guion gráfico en clips de video usando IA.",
     utilitiesDesc: "Exporta tu proyecto a PDF, Frame.io o gestiona datos.",
 
     // Tabs
@@ -889,12 +913,23 @@ export const translations = {
     storyBoardTab: "Guion Gráfico",
     outlineTab: "Biblia de Historia",
     narrativeArcTitle: "Arco Narrativo",
+    advancedArcTitle: "Arco Avanzado",
+    advancedArcDesc:
+      "Visualiza arcos narrativos complejos con múltiples capas de tensión y seguimiento de subtramas.",
     episodes: "Episodios",
     visualOrganizerTitle: "Organizador Visual",
+    gridGalleryTitle: "Galería en Cuadrícula",
+    gridGalleryDesc:
+      "Ve todos los planos y personajes en un diseño de cuadrícula completo.",
     videoGeneratorTab: "Generador de Video",
     utilitiesTitle: "Utilidades",
     authorsTitle: "Autores del Proyecto",
     creativeTeam: "Equipo Creativo",
+    modifyStoryDesc:
+      "Usa IA para modificar elementos de la historia, agregar nuevas escenas o refinar personajes.",
+    checkConsistencyDesc:
+      "Revisa y corrige automáticamente inconsistencias en los elementos de tu historia.",
+    cocreate: "Co-Crear",
 
     // Authors
     addAuthor: "Agregar Autor",

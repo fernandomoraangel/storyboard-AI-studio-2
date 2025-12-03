@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from "react";
-import { Episode, Scene, Shot, Character } from "../types";
+import { Episode, Scene, Shot, Character, Comment, User } from "../types";
 import { useLanguage } from "../contexts/languageContext";
+import { useCommentShortcut } from "../hooks/useCommentShortcut";
+import { CommentModal } from "./CommentModal";
 import {
   CloseIcon,
   LayoutGridIcon,
@@ -14,14 +16,136 @@ import {
 interface GridGalleryProps {
   episodes: Episode[];
   characters: Character[];
+  comments?: Comment[];
+  users?: User[];
   onClose?: () => void;
 }
 
 type ViewMode = "episodes" | "scenes" | "shots";
 
+// Modal to display comments for a specific shot
+const ShotCommentsModal: React.FC<{
+  episodeId: number;
+  sceneId: number;
+  shotId: number;
+  comments: Comment[];
+  users: User[];
+  onClose: () => void;
+}> = ({ episodeId, sceneId, shotId, comments, users, onClose }) => {
+  const shotComments = comments.filter(
+    (comment) =>
+      comment.location.type === "gridGallery" &&
+      comment.location.episodeId === episodeId &&
+      comment.location.sceneId === sceneId &&
+      comment.location.shotId === shotId &&
+      !comment.resolved
+  );
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="bg-gray-900 rounded-lg shadow-2xl border border-gray-700 w-full max-w-lg max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+          <h3 className="text-lg font-semibold text-white">
+            💬 Comments ({shotComments.length})
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition-colors"
+          >
+            <CloseIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Comments List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {shotComments.length === 0 ? (
+            <div className="text-center py-10 text-gray-500">
+              <p>No comments for this shot</p>
+            </div>
+          ) : (
+            shotComments.map((comment) => {
+              const user = users.find((u) => u.id === comment.userId);
+              return (
+                <div
+                  key={comment.id}
+                  className="bg-gray-800 rounded-lg p-3 border border-gray-700"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                      style={{
+                        backgroundColor: user?.color || "#6366f1",
+                      }}
+                    >
+                      {user?.name?.charAt(0)?.toUpperCase() || "?"}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-white">
+                        {user?.name || "Unknown User"}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {new Date(comment.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                    {comment.text}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Component to display comment indicator button
+const ShotCommentIndicator: React.FC<{
+  episodeId: number;
+  sceneId: number;
+  shotId: number;
+  comments: Comment[];
+  users: User[];
+  onOpenModal: () => void;
+}> = ({ episodeId, sceneId, shotId, comments, onOpenModal }) => {
+  const commentsCount = comments.filter(
+    (comment) =>
+      comment.location.type === "gridGallery" &&
+      comment.location.episodeId === episodeId &&
+      comment.location.sceneId === sceneId &&
+      comment.location.shotId === shotId &&
+      !comment.resolved
+  ).length;
+
+  if (commentsCount === 0) return null;
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenModal();
+      }}
+      className="text-[10px] text-yellow-400 flex items-center gap-0.5 hover:text-yellow-300 transition-colors"
+    >
+      💬 {commentsCount}
+    </button>
+  );
+};
+
 export const GridGallery: React.FC<GridGalleryProps> = ({
   episodes,
   characters,
+  comments = [],
+  users = [],
   onClose,
 }) => {
   const { t } = useLanguage();
@@ -37,6 +161,86 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
     scene: Scene;
     episode: Episode;
   } | null>(null);
+
+  // Comment functionality
+  const [commentContext, setCommentContext] = useState<{
+    shot: Shot;
+    scene: Scene;
+    episode: Episode;
+  } | null>(null);
+  const [commentsModalData, setCommentsModalData] = useState<{
+    episodeId: number;
+    sceneId: number;
+    shotId: number;
+  } | null>(null);
+
+  const {
+    showCommentModal,
+    setShowCommentModal,
+    locationLabel,
+    handleSubmitComment,
+    openCommentModal,
+  } = useCommentShortcut(
+    () => {
+      const context = commentContext || selectedShot;
+      if (context) {
+        return {
+          type: "gridGallery",
+          episodeId: context.episode.id,
+          sceneId: context.scene.id,
+          shotId: context.shot.id,
+        };
+      }
+      return {
+        type: "gridGallery",
+        episodeId: episodes[0]?.id || 0,
+        sceneId: episodes[0]?.scenes[0]?.id || 0,
+        shotId: episodes[0]?.scenes[0]?.shots[0]?.id || 0,
+      };
+    },
+    () => {
+      const context = commentContext || selectedShot;
+      if (context) {
+        const sceneIndex =
+          context.episode.scenes.findIndex((s) => s.id === context.scene.id) +
+          1;
+        const shotIndex =
+          context.scene.shots.findIndex((sh) => sh.id === context.shot.id) + 1;
+        return `Grid Gallery - ${sceneIndex}-${shotIndex}`;
+      }
+      return "Grid Gallery";
+    }
+  );
+
+  // Handler for opening comment modal with specific shot context
+  const handleOpenCommentForShot = (item: {
+    shot: Shot;
+    scene: Scene;
+    episode: Episode;
+  }) => {
+    setCommentContext(item);
+    // Small delay to ensure state is updated
+    setTimeout(() => {
+      openCommentModal();
+    }, 0);
+  };
+
+  // Get context details for comment modal
+  const getCommentContextDetails = () => {
+    const context = commentContext || selectedShot;
+    if (context) {
+      const sceneIndex =
+        context.episode.scenes.findIndex((s) => s.id === context.scene.id) + 1;
+      const shotIndex =
+        context.scene.shots.findIndex((sh) => sh.id === context.shot.id) + 1;
+      return {
+        episodeTitle: context.episode.title,
+        sceneTitle: context.scene.title,
+        shotNumber: `${sceneIndex}-${shotIndex}`,
+      };
+    }
+    return {};
+  };
 
   // Get unique subplots
   const uniqueSubplots = useMemo(() => {
@@ -262,8 +466,15 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
 
         return (
           <div
-            key={`${item.scene.id}-${item.shot.id}`}
-            onClick={() => handleShotClick(item)}
+            key={`${item.episode.id}-${item.scene.id}-${item.shot.id}`}
+            onClick={(e) => {
+              if (e.altKey) {
+                e.stopPropagation();
+                handleOpenCommentForShot(item);
+              } else {
+                handleShotClick(item);
+              }
+            }}
             className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg group flex flex-col"
           >
             <div className="aspect-video bg-gray-900 relative overflow-hidden">
@@ -295,9 +506,25 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
                 {item.shot.description || "No description"}
               </p>
               <div className="mt-2 pt-2 border-t border-gray-700 flex justify-between items-center">
-                <span className="text-[10px] text-indigo-400 truncate max-w-[60%]">
-                  {item.scene.title}
-                </span>
+                <div className="flex items-center gap-1 truncate max-w-[60%]">
+                  <span className="text-[10px] text-indigo-400 truncate">
+                    {item.scene.title}
+                  </span>
+                  <ShotCommentIndicator
+                    episodeId={item.episode.id}
+                    sceneId={item.scene.id}
+                    shotId={item.shot.id}
+                    comments={comments}
+                    users={users}
+                    onOpenModal={() =>
+                      setCommentsModalData({
+                        episodeId: item.episode.id,
+                        sceneId: item.scene.id,
+                        shotId: item.shot.id,
+                      })
+                    }
+                  />
+                </div>
                 {item.shot.subplot && (
                   <span
                     className="text-[9px] text-white bg-indigo-600/80 px-1 rounded"
@@ -496,6 +723,28 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Comment Modal */}
+      {showCommentModal && (
+        <CommentModal
+          onSubmit={handleSubmitComment}
+          onClose={() => setShowCommentModal(false)}
+          locationLabel={locationLabel}
+          {...getCommentContextDetails()}
+        />
+      )}
+
+      {/* Shot Comments Modal */}
+      {commentsModalData && (
+        <ShotCommentsModal
+          episodeId={commentsModalData.episodeId}
+          sceneId={commentsModalData.sceneId}
+          shotId={commentsModalData.shotId}
+          comments={comments}
+          users={users}
+          onClose={() => setCommentsModalData(null)}
+        />
       )}
     </div>
   );

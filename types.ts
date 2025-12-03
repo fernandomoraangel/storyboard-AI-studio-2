@@ -1,4 +1,3 @@
-
 export interface Shot {
   id: number;
   description: string;
@@ -28,7 +27,7 @@ export interface Scene {
   characters: string;
   setting: string;
   location: string;
-  dialogueType: 'dialogue' | 'mos';
+  dialogueType: "dialogue" | "mos";
   dialogue: string;
   shots: Shot[];
   transitionType: string;
@@ -49,7 +48,7 @@ export interface Episode {
 }
 
 export interface ChatMessage {
-  sender: 'user' | 'bot';
+  sender: "user" | "bot";
   text: string;
 }
 
@@ -71,7 +70,20 @@ export interface Reference {
   details?: string;
 }
 
-export type StoryboardStyle = 'Cinematic' | 'Sketch' | 'ComicBook' | 'Anime' | 'FilmNoir' | 'LineDrawing' | 'QuickLineDrawing' | 'LowPoly' | 'StylizedVideoGame' | 'Solarpunk' | 'Cyberpunk' | 'Sepia' | 'Custom';
+export type StoryboardStyle =
+  | "Cinematic"
+  | "Sketch"
+  | "ComicBook"
+  | "Anime"
+  | "FilmNoir"
+  | "LineDrawing"
+  | "QuickLineDrawing"
+  | "LowPoly"
+  | "StylizedVideoGame"
+  | "Solarpunk"
+  | "Cyberpunk"
+  | "Sepia"
+  | "Custom";
 
 export interface ArcPoint {
   id: number;
@@ -80,7 +92,7 @@ export interface ArcPoint {
   tension: number; // 0-10
   emotion: number; // 0-10
   conflict: number; // 0-10
-  modifiedCurves?: ('tension' | 'emotion' | 'conflict')[]; // Tracks which curves have active nodes at this point
+  modifiedCurves?: ("tension" | "emotion" | "conflict")[]; // Tracks which curves have active nodes at this point
   isEpisodeAnchor?: boolean; // True if this point represents a fixed episode/structural anchor
 }
 
@@ -113,6 +125,11 @@ export interface ProjectState {
   // Content
   episodes: Episode[];
   characters: Character[];
+
+  // Collaboration
+  comments?: Comment[];
+  users?: User[];
+  currentUserId?: string;
 }
 
 export interface CreativeProfile {
@@ -142,4 +159,28 @@ export interface CustomStyle {
   name: string;
   images: CustomStyleImage[];
   prompt: string;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  color: string; // Color for UI elements
+}
+
+export type CommentLocation =
+  | { type: "storyboard"; episodeId: number; sceneId: number; shotId?: number }
+  | { type: "gridGallery"; episodeId: number; sceneId: number; shotId: number }
+  | { type: "galleryView"; sceneId: number; shotId: number }
+  | { type: "narrativeArc"; pointId: number }
+  | { type: "advancedArc"; episodeId?: number; sceneId?: number };
+
+export interface Comment {
+  id: string;
+  userId: string;
+  text: string;
+  timestamp: Date;
+  location: CommentLocation;
+  resolved: boolean;
 }

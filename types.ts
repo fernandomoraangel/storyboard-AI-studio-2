@@ -170,7 +170,13 @@ export interface User {
 }
 
 export type CommentLocation =
-  | { type: "storyboard"; episodeId: number; sceneId: number; shotId?: number }
+  | {
+      type: "storyboard";
+      episodeId: number;
+      sceneId: number;
+      shotId?: number;
+      fieldName?: string;
+    }
   | { type: "gridGallery"; episodeId: number; sceneId: number; shotId: number }
   | { type: "galleryView"; sceneId: number; shotId: number }
   | { type: "narrativeArc"; pointId: number }

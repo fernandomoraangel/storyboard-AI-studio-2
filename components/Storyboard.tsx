@@ -21,6 +21,7 @@ interface StoryboardProps {
   reorderShots: (sceneId: number, startIndex: number, endIndex: number) => void;
   episodeId?: number;
   episodeTitle?: string;
+  comments?: any[];
 }
 
 export const Storyboard: React.FC<StoryboardProps> = ({
@@ -37,6 +38,7 @@ export const Storyboard: React.FC<StoryboardProps> = ({
   reorderShots,
   episodeId,
   episodeTitle,
+  comments = [],
 }) => {
   const { t } = useLanguage();
   const [openScenes, setOpenScenes] = useState<Record<number, boolean>>({});
@@ -164,6 +166,8 @@ export const Storyboard: React.FC<StoryboardProps> = ({
               isDragging={dragging && dragItemIndex.current === index}
               onDragStart={(e) => handleDragStart(e, index)}
               onDragEnd={handleDragEnd}
+              episodeId={episodeId}
+              comments={comments}
             />
           </div>
         ))}

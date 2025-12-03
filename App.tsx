@@ -1276,6 +1276,7 @@ export const App: React.FC = () => {
                       aspectRatio={aspectRatio}
                       episodeId={activeEpisode.id}
                       episodeTitle={activeEpisode.title}
+                      comments={comments}
                       updateSceneDetails={(id, details) => {
                         setEpisodes((prev) =>
                           prev.map((ep) =>

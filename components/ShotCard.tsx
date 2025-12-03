@@ -22,6 +22,7 @@ import {
   GripVerticalIcon,
   VideoIcon,
   MessageIcon,
+  CloseIcon,
 } from "./icons";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { useLanguage } from "../contexts/languageContext";
@@ -36,15 +37,23 @@ const InputField: React.FC<{
   name: string;
   onFieldClick?: (e: React.MouseEvent, fieldName: string) => void;
   commentsCount?: number;
-}> = ({ label, onFieldClick, commentsCount, name, ...props }) => (
+  onBadgeClick?: (fieldName: string) => void;
+}> = ({ label, onFieldClick, commentsCount, name, onBadgeClick, ...props }) => (
   <div>
     <div className="flex items-center gap-2 mb-1">
       <label className="block text-sm font-medium text-gray-400">{label}</label>
       {commentsCount !== undefined && commentsCount > 0 && (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onBadgeClick && onBadgeClick(name);
+          }}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors cursor-pointer"
+        >
           <MessageIcon className="w-3 h-3" />
           {commentsCount}
-        </span>
+        </button>
       )}
     </div>
     <input
@@ -66,15 +75,31 @@ const TextAreaField: React.FC<{
   placeholder?: string;
   onFieldClick?: (e: React.MouseEvent, fieldName: string) => void;
   commentsCount?: number;
-}> = ({ label, rows = 2, onFieldClick, commentsCount, name, ...props }) => (
+  onBadgeClick?: (fieldName: string) => void;
+}> = ({
+  label,
+  rows = 2,
+  onFieldClick,
+  commentsCount,
+  name,
+  onBadgeClick,
+  ...props
+}) => (
   <div>
     <div className="flex items-center gap-2 mb-1">
       <label className="block text-sm font-medium text-gray-400">{label}</label>
       {commentsCount !== undefined && commentsCount > 0 && (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onBadgeClick && onBadgeClick(name);
+          }}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors cursor-pointer"
+        >
           <MessageIcon className="w-3 h-3" />
           {commentsCount}
-        </span>
+        </button>
       )}
     </div>
     <textarea
@@ -158,6 +183,11 @@ export const ShotCard: React.FC<ShotCardProps> = ({
   const [commentField, setCommentField] = useState<string>("");
   const [commentLocation, setCommentLocation] =
     useState<CommentLocation | null>(null);
+  const [showCommentsPopup, setShowCommentsPopup] = useState(false);
+  const [selectedFieldComments, setSelectedFieldComments] = useState<Comment[]>(
+    []
+  );
+  const [selectedFieldName, setSelectedFieldName] = useState<string>("");
 
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [targetImageAI, setTargetImageAI] = useState("Gemini Flash Image");
@@ -468,6 +498,20 @@ export const ShotCard: React.FC<ShotCardProps> = ({
     }).length;
   };
 
+  const handleShowFieldComments = (fieldName: string) => {
+    const fieldComments = comments.filter((c) => {
+      const loc = c.location;
+      if (loc.type !== "storyboard") return false;
+      if (loc.sceneId !== sceneId) return false;
+      if (loc.shotId !== shot.id) return false;
+      if (loc.fieldName !== fieldName) return false;
+      return !c.resolved;
+    });
+    setSelectedFieldComments(fieldComments);
+    setSelectedFieldName(fieldName);
+    setShowCommentsPopup(true);
+  };
+
   return (
     <div
       className={`bg-gray-900/40 rounded-lg border border-gray-700 ${
@@ -552,10 +596,17 @@ export const ShotCard: React.FC<ShotCardProps> = ({
                 {t("image")}
               </label>
               {getCommentsCount("image") > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleShowFieldComments("image");
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors cursor-pointer"
+                >
                   <MessageIcon className="w-3 h-3" />
                   {getCommentsCount("image")}
-                </span>
+                </button>
               )}
             </div>
             <div
@@ -639,6 +690,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({
             rows={4}
             onFieldClick={handleFieldClick}
             commentsCount={getCommentsCount("description")}
+            onBadgeClick={handleShowFieldComments}
           />
           <InputField
             label={t("soundFx")}
@@ -647,6 +699,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({
             onChange={handleChange}
             onFieldClick={handleFieldClick}
             commentsCount={getCommentsCount("soundFx")}
+            onBadgeClick={handleShowFieldComments}
           />
 
           <div className="border-t border-gray-700 pt-4">
@@ -742,6 +795,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({
                   onChange={handleChange}
                   onFieldClick={handleFieldClick}
                   commentsCount={getCommentsCount("atmosphere")}
+                  onBadgeClick={handleShowFieldComments}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -753,6 +807,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({
                   rows={2}
                   onFieldClick={handleFieldClick}
                   commentsCount={getCommentsCount("technicalNotes")}
+                  onBadgeClick={handleShowFieldComments}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -765,6 +820,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({
                   placeholder={t("shotNotesPlaceholder") as string}
                   onFieldClick={handleFieldClick}
                   commentsCount={getCommentsCount("notes")}
+                  onBadgeClick={handleShowFieldComments}
                 />
               </div>
             </div>
@@ -831,6 +887,75 @@ export const ShotCard: React.FC<ShotCardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Comments Popup */}
+      {showCommentsPopup && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+          onClick={() => setShowCommentsPopup(false)}
+        >
+          <div
+            className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <MessageIcon className="w-5 h-5 text-indigo-400" />
+                {t("comments")} - {selectedFieldName}
+              </h3>
+              <button
+                onClick={() => setShowCommentsPopup(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <CloseIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 max-h-96 overflow-y-auto space-y-3">
+              {selectedFieldComments.length === 0 ? (
+                <p className="text-gray-400 text-center py-4">
+                  {t("noComments")}
+                </p>
+              ) : (
+                selectedFieldComments.map((comment) => {
+                  const loc = comment.location;
+                  let locationText = "";
+                  if (loc.type === "storyboard") {
+                    locationText = `${t("shot")} ${shotNumber}`;
+                    if (loc.fieldName) locationText += ` - ${loc.fieldName}`;
+                  }
+                  return (
+                    <div
+                      key={comment.id}
+                      className="bg-gray-700/50 rounded p-3 border border-gray-600"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={{ backgroundColor: "#6366f1" }}
+                        >
+                          {comment.userId?.charAt(0)?.toUpperCase() || "?"}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold text-white">
+                            User {comment.userId}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {locationText}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-white text-sm mb-2">{comment.text}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(comment.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Comment Modal */}
       {showCommentModal && commentLocation && (

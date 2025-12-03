@@ -30,7 +30,15 @@ const TextAreaField: React.FC<{
   onFieldClick?: (e: React.MouseEvent, fieldName: string) => void;
   commentsCount?: number;
   onBadgeClick?: (fieldName: string) => void;
-}> = ({ label, rows = 2, onFieldClick, commentsCount, name, onBadgeClick, ...props }) => (
+}> = ({
+  label,
+  rows = 2,
+  onFieldClick,
+  commentsCount,
+  name,
+  onBadgeClick,
+  ...props
+}) => (
   <div>
     <div className="flex items-center gap-2 mb-1">
       <label className="block text-sm font-medium text-gray-400">{label}</label>
@@ -108,7 +116,9 @@ export const SceneCard: React.FC<SceneCardProps> = ({
   const [commentLocation, setCommentLocation] =
     useState<CommentLocation | null>(null);
   const [showCommentsPopup, setShowCommentsPopup] = useState(false);
-  const [selectedFieldComments, setSelectedFieldComments] = useState<Comment[]>([]);
+  const [selectedFieldComments, setSelectedFieldComments] = useState<Comment[]>(
+    []
+  );
   const [selectedFieldName, setSelectedFieldName] = useState<string>("");
 
   const handleSceneChange = (
@@ -303,6 +313,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               placeholder={t("settingPlaceholder")}
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("setting")}
+              onBadgeClick={handleShowFieldComments}
             />
             <TextAreaField
               label={t("location")}
@@ -313,6 +324,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               placeholder={t("locationPlaceholder")}
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("location")}
+              onBadgeClick={handleShowFieldComments}
             />
           </div>
 
@@ -344,6 +356,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               }
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("dialogue")}
+              onBadgeClick={handleShowFieldComments}
             />
           </div>
 
@@ -357,6 +370,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               placeholder={t("musicPromptPlaceholder")}
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("musicPrompt")}
+              onBadgeClick={handleShowFieldComments}
             />
           </div>
 
@@ -370,6 +384,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               placeholder={t("keyObjectsPlaceholder")}
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("keyObjects")}
+              onBadgeClick={handleShowFieldComments}
             />
             <TextAreaField
               label={t("actions")}
@@ -380,6 +395,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               placeholder={t("actionsPlaceholder")}
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("actions")}
+              onBadgeClick={handleShowFieldComments}
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -392,6 +408,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               placeholder={t("tonePlaceholder")}
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("tone")}
+              onBadgeClick={handleShowFieldComments}
             />
             <TextAreaField
               label={t("notes")}
@@ -402,6 +419,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               placeholder={t("notesPlaceholder")}
               onFieldClick={handleFieldClick}
               commentsCount={getCommentsCount("notes")}
+              onBadgeClick={handleShowFieldComments}
             />
           </div>
 
@@ -482,27 +500,70 @@ export const SceneCard: React.FC<SceneCardProps> = ({
 
       {/* Comments Popup */}
       {showCommentsPopup && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setShowCommentsPopup(false)}>
-          <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-gray-700" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+          onClick={() => setShowCommentsPopup(false)}
+        >
+          <div
+            className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full border border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <MessageIcon className="w-5 h-5 text-indigo-400" />
                 {t("comments")} - {selectedFieldName}
               </h3>
-              <button onClick={() => setShowCommentsPopup(false)} className="text-gray-400 hover:text-white">
+              <button
+                onClick={() => setShowCommentsPopup(false)}
+                className="text-gray-400 hover:text-white"
+              >
                 <CloseIcon className="w-5 h-5" />
               </button>
             </div>
             <div className="p-4 max-h-96 overflow-y-auto space-y-3">
               {selectedFieldComments.length === 0 ? (
-                <p className="text-gray-400 text-center py-4">{t("noComments")}</p>
+                <p className="text-gray-400 text-center py-4">
+                  {t("noComments")}
+                </p>
               ) : (
-                selectedFieldComments.map((comment) => (
-                  <div key={comment.id} className="bg-gray-700/50 rounded p-3 border border-gray-600">
-                    <p className="text-white text-sm">{comment.text}</p>
-                    <p className="text-xs text-gray-400 mt-2">{new Date(comment.timestamp).toLocaleString()}</p>
-                  </div>
-                ))
+                selectedFieldComments.map((comment) => {
+                  const user = comments.find(
+                    (c) => c.userId === comment.userId
+                  );
+                  const loc = comment.location;
+                  let locationText = "";
+                  if (loc.type === "storyboard") {
+                    locationText = `${t("scene")} ${sceneNumber}`;
+                    if (loc.fieldName) locationText += ` - ${loc.fieldName}`;
+                  }
+                  return (
+                    <div
+                      key={comment.id}
+                      className="bg-gray-700/50 rounded p-3 border border-gray-600"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={{ backgroundColor: "#6366f1" }}
+                        >
+                          {comment.userId?.charAt(0)?.toUpperCase() || "?"}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold text-white">
+                            User {comment.userId}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {locationText}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-white text-sm mb-2">{comment.text}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(comment.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

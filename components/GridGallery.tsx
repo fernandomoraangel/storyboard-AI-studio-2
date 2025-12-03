@@ -32,14 +32,26 @@ const ShotCommentsModal: React.FC<{
   users: User[];
   onClose: () => void;
 }> = ({ episodeId, sceneId, shotId, comments, users, onClose }) => {
-  const shotComments = comments.filter(
-    (comment) =>
-      comment.location.type === "gridGallery" &&
-      comment.location.episodeId === episodeId &&
-      comment.location.sceneId === sceneId &&
-      comment.location.shotId === shotId &&
-      !comment.resolved
-  );
+  const shotComments = comments.filter((comment) => {
+    if (comment.resolved) return false;
+    if (
+      comment.location.sceneId !== sceneId ||
+      comment.location.shotId !== shotId
+    )
+      return false;
+
+    // Include both gridGallery and galleryView comments
+    if (comment.location.type === "gridGallery") {
+      return comment.location.episodeId === episodeId;
+    }
+
+    if (comment.location.type === "galleryView") {
+      // galleryView doesn't have episodeId, so we only check scene and shot
+      return true;
+    }
+
+    return false;
+  });
 
   return (
     <div
@@ -117,14 +129,26 @@ const ShotCommentIndicator: React.FC<{
   users: User[];
   onOpenModal: () => void;
 }> = ({ episodeId, sceneId, shotId, comments, onOpenModal }) => {
-  const commentsCount = comments.filter(
-    (comment) =>
-      comment.location.type === "gridGallery" &&
-      comment.location.episodeId === episodeId &&
-      comment.location.sceneId === sceneId &&
-      comment.location.shotId === shotId &&
-      !comment.resolved
-  ).length;
+  const commentsCount = comments.filter((comment) => {
+    if (comment.resolved) return false;
+    if (
+      comment.location.sceneId !== sceneId ||
+      comment.location.shotId !== shotId
+    )
+      return false;
+
+    // Include both gridGallery and galleryView comments
+    if (comment.location.type === "gridGallery") {
+      return comment.location.episodeId === episodeId;
+    }
+
+    if (comment.location.type === "galleryView") {
+      // galleryView doesn't have episodeId, so we only check scene and shot
+      return true;
+    }
+
+    return false;
+  }).length;
 
   if (commentsCount === 0) return null;
 
@@ -475,6 +499,7 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
                 handleShotClick(item);
               }
             }}
+            title="Click to view, Alt+Click to comment, Shift+C when selected"
             className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg group flex flex-col"
           >
             <div className="aspect-video bg-gray-900 relative overflow-hidden">

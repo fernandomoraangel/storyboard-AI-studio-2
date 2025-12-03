@@ -56,10 +56,24 @@ export const CommentsViewer: React.FC<CommentsViewerProps> = ({
       loc.type === "gridGallery" ||
       loc.type === "galleryView"
     ) {
-      const episode = episodes.find(
-        (e) => "episodeId" in loc && e.id === loc.episodeId
-      );
-      const scene = episode?.scenes.find((s) => s.id === loc.sceneId);
+      let episode, scene;
+
+      if (loc.type === "galleryView") {
+        // For galleryView, search for the scene across all episodes
+        for (const ep of episodes) {
+          const foundScene = ep.scenes.find((s) => s.id === loc.sceneId);
+          if (foundScene) {
+            episode = ep;
+            scene = foundScene;
+            break;
+          }
+        }
+      } else {
+        episode = episodes.find(
+          (e) => "episodeId" in loc && e.id === loc.episodeId
+        );
+        scene = episode?.scenes.find((s) => s.id === loc.sceneId);
+      }
 
       if (loc.type === "storyboard") {
         if (loc.shotId) {
@@ -84,7 +98,11 @@ export const CommentsViewer: React.FC<CommentsViewerProps> = ({
       }
 
       if (loc.type === "galleryView") {
-        return `${t("galleryView")} - ${scene?.title || "Scene"}`;
+        const shotIndex =
+          scene?.shots.findIndex((sh) => sh.id === loc.shotId) ?? -1;
+        return `${t("galleryView")} - ${scene?.title || "Scene"} - Shot ${
+          shotIndex + 1
+        }`;
       }
     }
 
@@ -274,12 +292,27 @@ export const CommentsViewer: React.FC<CommentsViewerProps> = ({
                     loc.type === "gridGallery" ||
                     loc.type === "galleryView"
                   ) {
-                    const episode = episodes.find(
-                      (e) => "episodeId" in loc && e.id === loc.episodeId
-                    );
-                    const scene = episode?.scenes.find(
-                      (s) => s.id === loc.sceneId
-                    );
+                    let episode, scene;
+
+                    if (loc.type === "galleryView") {
+                      // For galleryView, search for the scene across all episodes
+                      for (const ep of episodes) {
+                        const foundScene = ep.scenes.find(
+                          (s) => s.id === loc.sceneId
+                        );
+                        if (foundScene) {
+                          episode = ep;
+                          scene = foundScene;
+                          break;
+                        }
+                      }
+                    } else {
+                      episode = episodes.find(
+                        (e) => "episodeId" in loc && e.id === loc.episodeId
+                      );
+                      scene = episode?.scenes.find((s) => s.id === loc.sceneId);
+                    }
+
                     const shotIndex =
                       scene?.shots.findIndex((sh) => sh.id === loc.shotId) ??
                       -1;

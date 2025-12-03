@@ -1208,6 +1208,8 @@ export const App: React.FC = () => {
                   <GalleryView
                     scenes={episodes.flatMap((e) => e.scenes)}
                     characters={characters}
+                    comments={comments}
+                    users={users}
                     onClose={() => setWorkflowPhase("storyboard")}
                   />
                 )}

@@ -404,31 +404,44 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
 
   const renderEpisodes = () => (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 p-6">
-      {filteredData.episodes.map((ep) => (
-        <div
-          key={ep.id}
-          onClick={() => handleEpisodeClick(ep.id)}
-          className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg group"
-        >
-          <div className="h-40 bg-gray-700 flex items-center justify-center group-hover:bg-gray-600 transition-colors">
-            <FilmIcon className="w-12 h-12 text-gray-500 group-hover:text-indigo-400" />
-          </div>
-          <div className="p-4">
-            <h3 className="font-bold text-white text-lg mb-1 truncate">
-              {ep.title}
-            </h3>
-            <p className="text-gray-400 text-sm line-clamp-2 mb-3 h-10">
-              {ep.synopsis || "No synopsis"}
-            </p>
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{ep.scenes.length} Scenes</span>
-              <span>
-                {ep.scenes.reduce((acc, s) => acc + s.shots.length, 0)} Shots
-              </span>
+      {filteredData.episodes.map((ep) => {
+        // Get first shot of first scene
+        const firstShot = ep.scenes[0]?.shots[0];
+
+        return (
+          <div
+            key={ep.id}
+            onClick={() => handleEpisodeClick(ep.id)}
+            className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg group"
+          >
+            <div className="h-40 bg-gray-700 flex items-center justify-center group-hover:bg-gray-600 transition-colors relative overflow-hidden">
+              {firstShot?.imageUrl ? (
+                <img
+                  src={firstShot.imageUrl}
+                  alt={ep.title}
+                  className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                />
+              ) : (
+                <FilmIcon className="w-12 h-12 text-gray-500 group-hover:text-indigo-400" />
+              )}
+            </div>
+            <div className="p-4">
+              <h3 className="font-bold text-white text-lg mb-1 truncate">
+                {ep.title}
+              </h3>
+              <p className="text-gray-400 text-sm line-clamp-2 mb-3 h-10">
+                {ep.synopsis || "No synopsis"}
+              </p>
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>{ep.scenes.length} Scenes</span>
+                <span>
+                  {ep.scenes.reduce((acc, s) => acc + s.shots.length, 0)} Shots
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 

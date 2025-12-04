@@ -188,6 +188,13 @@ export const App: React.FC = () => {
       avatar: "",
       color: "#8b5cf6",
     },
+    {
+      id: "6",
+      name: "Fernando Mora",
+      email: "fernando.mora@studio.com",
+      avatar: "",
+      color: "#06b6d4",
+    },
   ]);
   const [currentUserId, setCurrentUserId] = useState<string>("1"); // Default user
   const [showUserSelector, setShowUserSelector] = useState(false);
